@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>پروژه انتقال داده صوتی - کامل (نسخه گیت‌هاب)</title>
+    <title>پروژه انتقال داده صوتی - کامل</title>
     <style>
         body { font-family: Tahoma, Arial; padding: 20px; background: #f0f2f5; }
         h1 { text-align: center; color: #333; }
@@ -20,8 +20,24 @@
         input[type="file"] { margin-bottom: 10px; }
         #outImgBox img { max-width: 150px; max-height: 150px; border: 2px solid #28a745; border-radius: 5px; margin: 5px; }
     </style>
-    <!-- لود کردن Quiet.js -->
+    
+    <!-- لود کردن کتابخانه اصلی -->
     <script src="quiet.js"></script>
+
+    <!-- پچ برطرف‌کننده باگ Module در مرورگرهای جدید -->
+    <script>
+        if (typeof window.Module === 'undefined') {
+            window.Module = {};
+        }
+        window.Module.intArrayFromString = function(str) {
+            var arr = [];
+            for (var i = 0; i < str.length; i++) {
+                arr.push(str.charCodeAt(i));
+            }
+            arr.push(0); 
+            return arr;
+        };
+    </script>
 </head>
 <body>
 
@@ -71,7 +87,6 @@
     const rxStatus = document.getElementById('rxStatus');
 
     // مقداردهی اولیه Quiet.js
-    // تغییر ۱: اضافه شدن ./ به مسیرها برای پیدا شدن در زیرشاخه‌های گیت‌هاب پیجز
     Quiet.init({
         profilesPrefix: "./",
         memoryInitializerPrefix: "./",
@@ -101,7 +116,7 @@
     }
 
     function playSound(payloadBuffer) {
-        // تغییر ۲: باز کردن قفل صدای مرورگرها (Autoplay Policy)
+        // باز کردن قفل صدای مرورگرها (Autoplay Policy)
         if (Quiet.audioCtx && Quiet.audioCtx.state === 'suspended') {
             Quiet.audioCtx.resume();
         }
@@ -172,7 +187,7 @@
     // ==========================================
 
     function startReceiving() {
-        // تغییر ۳: باز کردن قفل میکروفون
+        // باز کردن قفل میکروفون
         if (Quiet.audioCtx && Quiet.audioCtx.state === 'suspended') {
             Quiet.audioCtx.resume();
         }
