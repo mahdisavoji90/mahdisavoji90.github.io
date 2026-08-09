@@ -104,10 +104,10 @@ else if (typeof exports === 'object')
             return;
         }
 
-        // بارگذاری ggwave
+        // بارگذاری ggwave (API جدید: ggwave_factory به عنوان تابع)
         ggwave().then(function(module) {
             ggwaveInstance = module;
-            protocolId = ggwaveInstance.TxProtocolId.GGWAVE_TX_PROTOCOL_AUDIBLE_FASTEST;
+            protocolId = module.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FAST;
             
             document.getElementById('sendTextBtn').disabled = false;
             document.getElementById('sendImgBtn').disabled = false;
@@ -165,14 +165,21 @@ else if (typeof exports === 'object')
 
     function playSound(payload) {
         return new Promise((resolve) => {
-            const waveform = ggwaveInstance.encode(payload, protocolId, 50);
+            // API جدید: init با پارامترها + encode(instance, data, protocol, volume)
+            const parameters = ggwaveInstance.getDefaultParameters();
+            parameters.sampleRateInp = audioContext.sampleRate;
+            parameters.sampleRateOut = audioContext.sampleRate;
+            const inst = ggwaveInstance.init(parameters);
+            
+            const text = new TextDecoder().decode(payload);
+            const waveform = ggwaveInstance.encode(inst, text, protocolId, 50);
             const buffer = audioContext.createBuffer(1, waveform.length, audioContext.sampleRate);
             buffer.getChannelData(0).set(waveform);
 
             const source = audioContext.createBufferSource();
             source.buffer = buffer;
             source.connect(audioContext.destination);
-            source.onended = resolve;
+            source.onended = () => { ggwaveInstance.free(inst); resolve(); };
             source.start();
         });
     }
@@ -227,13 +234,20 @@ else if (typeof exports === 'object')
 
         try {
             mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false } });
-            ggwaveContext = ggwaveInstance.init(0, audioContext.sampleRate, protocolId);
+            // API جدید: init با پارامترهای پیش‌فرض
+            const parameters = ggwaveInstance.getDefaultParameters();
+            parameters.sampleRateInp = audioContext.sampleRate;
+            parameters.sampleRateOut = audioContext.sampleRate;
+            parameters.soundMarkerThreshold = 0;
+            ggwaveContext = ggwaveInstance.init(parameters);
             const source = audioContext.createMediaStreamSource(mediaStream);
             scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
             
             scriptProcessor.onaudioprocess = (e) => {
                 const audioData = e.inputBuffer.getChannelData(0);
-                const res = ggwaveInstance.decode(ggwaveContext, audioData);
+                // API جدید: decode(instance, int8array)
+                const int8 = new Int8Array(audioData.buffer, audioData.byteOffset, audioData.length);
+                const res = ggwaveInstance.decode(ggwaveContext, int8);
                 if (res && res.length > 0) handlePacket(new Uint8Array(res));
             };
 
