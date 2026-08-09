@@ -286,34 +286,49 @@ else if (typeof exports === 'object')
             receivedChunks[chunkIndex] = data;
             
             let count = receivedChunks.filter(c => c !== undefined).length;
-            document.getElementById('rxProgress').style.width = Math.round((count / expectedChunks) * 100) + '%';
-            document.getElementById('rxStatus').innerText = `دریافت پکت ${chunkIndex + 1} از ${expectedChunks}`;
+            let percent = Math.round((count / expectedChunks) * 100);
+            document.getElementById('rxProgress').style.width = percent + '%';
+            document.getElementById('rxStatus').innerText = `در حال دریافت: ${percent}% (پکت ${chunkIndex + 1} از ${expectedChunks})`;
+            console.log(`[Rx] Received packet ${chunkIndex + 1}/${expectedChunks} (${percent}%)`);
 
             if (count === expectedChunks) assembleData();
+        } else {
+            console.log(`[Rx] Duplicate packet ignored: ${chunkIndex}`);
         }
     }
 
     function assembleData() {
         document.getElementById('rxStatus').innerText = "فایل کامل شد! در حال پردازش...";
-        let totalLength = receivedChunks.reduce((acc, val) => acc + val.length, 0);
+        let totalLength = receivedChunks.reduce((acc, val) => acc + (val ? val.length : 0), 0);
         let finalData = new Uint8Array(totalLength);
         let offset = 0;
         
         receivedChunks.forEach(chunk => {
-            finalData.set(chunk, offset);
-            offset += chunk.length;
+            if (chunk) {
+                finalData.set(chunk, offset);
+                offset += chunk.length;
+            }
         });
 
         if (currentDataType === 0) {
             document.getElementById('receivedText').value += new TextDecoder().decode(finalData) + "\n";
+            document.getElementById('rxStatus').innerText = "✅ متن با موفقیت دریافت شد.";
         } else {
             let blob = new Blob([finalData], {type: 'image/webp'});
             let img = document.createElement('img');
             img.src = URL.createObjectURL(blob);
-            document.getElementById('outImgBox').appendChild(img);
+            img.onload = () => {
+                document.getElementById('outImgBox').appendChild(img);
+                document.getElementById('rxStatus').innerText = "✅ تصویر با موفقیت دریافت و نمایش داده شد.";
+            };
+            img.onerror = () => {
+                document.getElementById('rxStatus').innerText = "❌ خطا در نمایش تصویر (داده‌ها خراب است)";
+            };
         }
         
-        expectedChunks = 0; // ریست برای فایل بعدی
+        expectedChunks = 0;
+        receivedChunks = [];
+        document.getElementById('rxProgress').style.width = '0%';
     }
 </script>
 </body>
