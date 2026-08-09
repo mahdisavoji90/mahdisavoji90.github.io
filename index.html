@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>پروژه انتقال داده صوتی - کامل</title>
+    <title>پروژه انتقال داده صوتی - کامل (نسخه گیت‌هاب)</title>
     <style>
         body { font-family: Tahoma, Arial; padding: 20px; background: #f0f2f5; }
         h1 { text-align: center; color: #333; }
@@ -71,10 +71,11 @@
     const rxStatus = document.getElementById('rxStatus');
 
     // مقداردهی اولیه Quiet.js
+    // تغییر ۱: اضافه شدن ./ به مسیرها برای پیدا شدن در زیرشاخه‌های گیت‌هاب پیجز
     Quiet.init({
-        profilesPrefix: "/",
-        memoryInitializerPrefix: "/",
-        libfecPrefix: "/"
+        profilesPrefix: "./",
+        memoryInitializerPrefix: "./",
+        libfecPrefix: "./"
     });
 
     Quiet.addReadyCallback(
@@ -100,6 +101,11 @@
     }
 
     function playSound(payloadBuffer) {
+        // تغییر ۲: باز کردن قفل صدای مرورگرها (Autoplay Policy)
+        if (Quiet.audioCtx && Quiet.audioCtx.state === 'suspended') {
+            Quiet.audioCtx.resume();
+        }
+
         txStatus.innerText = "در حال پخش صدای داده‌ها...";
         transmitter = Quiet.transmitter({
             profile: 'audible', 
@@ -128,7 +134,7 @@
         const img = new Image();
         img.src = URL.createObjectURL(file);
         img.onload = function() {
-            const MAX_DIM = 80; // کاهش ابعاد برای انتقال با صدا
+            const MAX_DIM = 80;
             let width = img.width;
             let height = img.height;
 
@@ -166,6 +172,11 @@
     // ==========================================
 
     function startReceiving() {
+        // تغییر ۳: باز کردن قفل میکروفون
+        if (Quiet.audioCtx && Quiet.audioCtx.state === 'suspended') {
+            Quiet.audioCtx.resume();
+        }
+
         document.getElementById('btnReceive').disabled = true;
         document.getElementById('btnStop').disabled = false;
         rxStatus.innerText = "در حال گوش دادن به محیط (صبر کنید)...";
