@@ -3,168 +3,176 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>پروژه انتقال داده صوتی - کامل</title>
+    <title>انتقال داده با صدا - نسخه پرسرعت (ggwave)</title>
     <style>
-        body { font-family: Tahoma, Arial; padding: 20px; background: #f0f2f5; }
+        body { font-family: Tahoma, Arial; padding: 20px; background: #f4f6f9; }
         h1 { text-align: center; color: #333; }
         .container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
-        .box { background: white; padding: 20px; border-radius: 8px; width: 45%; min-width: 300px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        textarea { width: 95%; height: 80px; margin-bottom: 10px; padding: 10px; direction: ltr; resize: none; border-radius: 4px; border: 1px solid #ccc; }
-        button { padding: 10px 20px; cursor: pointer; color: white; border: none; border-radius: 4px; font-weight: bold; margin-top: 5px; width: 100%; font-size: 14px;}
+        .box { background: white; padding: 20px; border-radius: 8px; width: 45%; min-width: 300px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        textarea { width: 95%; height: 80px; margin-bottom: 10px; padding: 10px; direction: ltr; resize: none; border: 1px solid #ddd; border-radius: 4px; }
+        button { padding: 12px 20px; cursor: pointer; color: white; border: none; border-radius: 4px; font-weight: bold; margin-top: 5px; width: 100%; font-size: 14px; transition: 0.3s;}
         .btn-send { background: #007bff; }
         .btn-send:hover { background: #0056b3; }
         .btn-receive { background: #28a745; }
-        .btn-stop { background: #dc3545; margin-top: 5px; }
-        .status { padding: 10px; background: #e9ecef; border-radius: 4px; margin-top: 15px; font-family: monospace; font-size: 0.9em; color: #444; }
-        .warning { color: #d9534f; font-size: 0.85em; font-weight: bold; margin-bottom: 15px; }
-        input[type="file"] { margin-bottom: 10px; }
-        #outImgBox img { max-width: 150px; max-height: 150px; border: 2px solid #28a745; border-radius: 5px; margin: 5px; }
+        .btn-receive:hover { background: #218838; }
+        .btn-stop { background: #dc3545; display: none; }
+        .status { padding: 10px; background: #e9ecef; border-radius: 4px; margin-top: 15px; font-size: 0.85em; color: #444; font-weight: bold;}
+        .progress-bar { height: 10px; background: #28a745; width: 0%; border-radius: 5px; transition: 0.2s; margin-top: 5px; }
+        #outImgBox img { max-width: 100px; border: 2px solid #28a745; border-radius: 5px; margin: 5px; }
     </style>
     
-    <!-- لود کردن کتابخانه اصلی -->
-    <script src="quiet.js"></script>
-
-    <!-- پچ برطرف‌کننده باگ Module در مرورگرهای جدید -->
-    <script>
-        if (typeof window.Module === 'undefined') {
-            window.Module = {};
-        }
-        window.Module.intArrayFromString = function(str) {
-            var arr = [];
-            for (var i = 0; i < str.length; i++) {
-                arr.push(str.charCodeAt(i));
-            }
-            arr.push(0); 
-            return arr;
-        };
-    </script>
+    <!-- لود کردن کتابخانه مستقیماً از پوشه خودتان -->
+    <script src="./ggwave.js"></script>
 </head>
 <body>
 
-<h1>سامانه انتقال داده با امواج صوتی (Acoustic Data Transfer)</h1>
+<h1>انتقال داده با باند پهن (حالت پرسرعت)</h1>
 
 <div class="container">
-    <!-- بخش فرستنده -->
+    <!-- فرستنده -->
     <div class="box">
         <h3 style="color: #007bff;">فرستنده (Transmitter)</h3>
-        <p class="warning">صداهای تولید شده در این حالت بسیار بلند هستند. ولوم اسپیکر را کمی کم کنید.</p>
         
-        <h4>۱. ارسال پیام متنی</h4>
-        <textarea id="dataToSend" placeholder="متن خود را اینجا وارد کنید..."></textarea>
-        <button class="btn-send" onclick="transmitText()">ارسال متن با صدا</button>
+        <h4>۱. پیام متنی</h4>
+        <textarea id="dataToSend" placeholder="متن خود را وارد کنید..."></textarea>
+        <button class="btn-send" onclick="transmit(0)" id="sendTextBtn" disabled>ارسال متن</button>
 
         <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
 
-        <h4>۲. ارسال تصویر (فشرده‌سازی خودکار)</h4>
-        <input type="file" id="imageInput" accept="image/*">
-        <button class="btn-send" onclick="transmitImage()">ارسال تصویر با صدا</button>
+        <h4>۲. تصویر (تکه‌تکه و فشرده)</h4>
+        <input type="file" id="imageInput" accept="image/*" style="margin-bottom: 10px;">
+        <button class="btn-send" onclick="prepareImage()" id="sendImgBtn" disabled>ارسال تصویر</button>
 
-        <div id="txStatus" class="status">وضعیت فرستنده: آماده</div>
+        <div id="txStatus" class="status">در حال بررسی ارتباط با کتابخانه محلی...</div>
     </div>
 
-    <!-- بخش گیرنده -->
+    <!-- گیرنده -->
     <div class="box">
         <h3 style="color: #28a745;">گیرنده (Receiver)</h3>
-        <p style="font-size: 0.9em; color: #555;">برای دریافت داده، دستگاه باید از طریق میکروفون در حال شنود باشد.</p>
         
-        <button class="btn-receive" id="btnReceive" onclick="startReceiving()">شروع شنود میکروفون</button>
-        <button class="btn-stop" id="btnStop" onclick="stopReceiving()" disabled>توقف شنود</button>
+        <button class="btn-receive" id="btnReceive" onclick="startReceiving()" disabled>شروع شنود محیط</button>
+        <button class="btn-stop" id="btnStop" onclick="stopReceiving()">توقف شنود</button>
         
-        <div id="rxStatus" class="status">وضعیت گیرنده: در انتظار شروع...</div>
+        <div id="rxStatus" class="status">منتظر شروع...</div>
+        <div class="progress-bar" id="rxProgress"></div>
         
-        <h4 style="margin-top: 20px;">پیام‌های متنی دریافتی:</h4>
-        <textarea id="receivedText" readonly placeholder="پیام‌ها اینجا ظاهر می‌شوند..."></textarea>
+        <h4 style="margin-top: 20px;">خروجی متن:</h4>
+        <textarea id="receivedText" readonly></textarea>
 
-        <h4>تصاویر دریافتی:</h4>
+        <h4>خروجی تصویر:</h4>
         <div id="outImgBox"></div>
     </div>
 </div>
 
 <script>
-    let transmitter;
-    let receiver;
-    const txStatus = document.getElementById('txStatus');
-    const rxStatus = document.getElementById('rxStatus');
+    let ggwaveInstance = null;
+    let audioContext = null;
+    
+    // تنظیمات باند پهن پرسرعت
+    let protocolId; 
+    const CHUNK_SIZE = 64; // حجم هر تکه (بایت)
+    const GUARD_INTERVAL = 300; // سکوت بین پکت‌ها (میلی‌ثانیه)
 
-    // مقداردهی اولیه Quiet.js
-    Quiet.init({
-        profilesPrefix: "./",
-        memoryInitializerPrefix: "./",
-        libfecPrefix: "./"
-    });
-
-    Quiet.addReadyCallback(
-        () => {
-            txStatus.innerText = "وضعیت: هسته صوتی بارگذاری شد (آماده).";
-            rxStatus.innerText = "وضعیت: هسته صوتی بارگذاری شد (آماده شنود).";
-        },
-        (err) => {
-            txStatus.innerText = "خطا در لود هسته صوتی: " + err;
-            rxStatus.innerText = "خطا در لود هسته صوتی: " + err;
-        }
-    );
-
-    // ==========================================
-    // بخش فرستنده (Transmitter)
-    // ==========================================
-
-    function createPayload(type, dataBuffer) {
-        let payload = new Uint8Array(dataBuffer.byteLength + 1);
-        payload[0] = type;
-        payload.set(new Uint8Array(dataBuffer), 1);
-        return payload.buffer;
-    }
-
-    function playSound(payloadBuffer) {
-        // باز کردن قفل صدای مرورگرها (Autoplay Policy)
-        if (Quiet.audioCtx && Quiet.audioCtx.state === 'suspended') {
-            Quiet.audioCtx.resume();
+    window.onload = function() {
+        // بررسی وجود فایل ggwave.js در پوشه
+        if (typeof ggwave === 'undefined') {
+            document.getElementById('txStatus').innerText = "خطا: فایل ggwave.js در پوشه پروژه پیدا نشد! لطفاً آن را دانلود کرده و کنار index.html قرار دهید.";
+            document.getElementById('rxStatus').innerText = "کتابخانه پیدا نشد.";
+            return;
         }
 
-        txStatus.innerText = "در حال پخش صدای داده‌ها...";
-        transmitter = Quiet.transmitter({
-            profile: 'audible', 
-            onFinish: function() {
-                txStatus.innerText = "وضعیت فرستنده: ارسال با موفقیت تمام شد.";
-            }
+        // بارگذاری ggwave
+        ggwave().then(function(module) {
+            ggwaveInstance = module;
+            protocolId = ggwaveInstance.TxProtocolId.GGWAVE_TX_PROTOCOL_AUDIBLE_FASTEST;
+            
+            document.getElementById('sendTextBtn').disabled = false;
+            document.getElementById('sendImgBtn').disabled = false;
+            document.getElementById('btnReceive').disabled = false;
+            
+            document.getElementById('txStatus').innerText = "آماده ارسال.";
+            document.getElementById('rxStatus').innerText = "آماده دریافت.";
         });
-        transmitter.transmit(payloadBuffer);
+    };
+
+    function initAudio() {
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+        }
+        if (audioContext.state === 'suspended') {
+            audioContext.resume();
+        }
     }
 
-    function transmitText() {
-        const text = document.getElementById('dataToSend').value;
-        if (!text) return alert("لطفاً متنی وارد کنید.");
+    // ==========================================
+    // فرستنده (Transmitter) - مجهز به Chunking
+    // ==========================================
+
+    async function transmit(dataType, dataBuffer = null) {
+        initAudio();
         
-        const dataBuffer = Quiet.str2ab(text);
-        const payload = createPayload(0, dataBuffer);
-        playSound(payload);
+        let dataView;
+        if (dataType === 0) {
+            const text = document.getElementById('dataToSend').value;
+            if (!text) return alert("متنی وارد نشده!");
+            dataView = new TextEncoder().encode(text);
+        } else {
+            dataView = new Uint8Array(dataBuffer);
+        }
+
+        const totalChunks = Math.ceil(dataView.length / CHUNK_SIZE);
+        document.getElementById('txStatus').innerText = `در حال ارسال ${totalChunks} پکت...`;
+
+        for (let i = 0; i < totalChunks; i++) {
+            const chunk = dataView.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+            
+            const payload = new Uint8Array(3 + chunk.length);
+            payload[0] = dataType; 
+            payload[1] = i;        
+            payload[2] = totalChunks; 
+            payload.set(chunk, 3);
+            
+            await playSound(payload);
+            document.getElementById('txStatus').innerText = `پکت ${i + 1} از ${totalChunks} ارسال شد.`;
+            
+            await new Promise(r => setTimeout(r, GUARD_INTERVAL));
+        }
+        document.getElementById('txStatus').innerText = "ارسال با موفقیت تمام شد!";
     }
 
-    function transmitImage() {
+    function playSound(payload) {
+        return new Promise((resolve) => {
+            const waveform = ggwaveInstance.encode(payload, protocolId, 50);
+            const buffer = audioContext.createBuffer(1, waveform.length, audioContext.sampleRate);
+            buffer.getChannelData(0).set(waveform);
+
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioContext.destination);
+            source.onended = resolve;
+            source.start();
+        });
+    }
+
+    // پردازش تصویر قبل از ارسال
+    function prepareImage() {
         const file = document.getElementById('imageInput').files[0];
-        if (!file) return alert("لطفاً یک عکس انتخاب کنید.");
+        if (!file) return alert("لطفاً عکس انتخاب کنید.");
 
-        txStatus.innerText = "در حال فشرده‌سازی تصویر...";
-
+        document.getElementById('txStatus').innerText = "در حال فشرده‌سازی...";
         const img = new Image();
         img.src = URL.createObjectURL(file);
         img.onload = function() {
-            const MAX_DIM = 80;
-            let width = img.width;
-            let height = img.height;
-
-            if (width > height) {
-                if (width > MAX_DIM) { height = Math.round(height * MAX_DIM / width); width = MAX_DIM; }
-            } else {
-                if (height > MAX_DIM) { width = Math.round(width * MAX_DIM / height); height = MAX_DIM; }
-            }
+            const MAX_DIM = 64; 
+            let width = img.width, height = img.height;
+            if (width > height) { height = Math.round(height * MAX_DIM / width); width = MAX_DIM; }
+            else { width = Math.round(width * MAX_DIM / height); height = MAX_DIM; }
 
             const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
+            canvas.width = width; canvas.height = height;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
-
+            
             const imgData = ctx.getImageData(0, 0, width, height);
             for (let i = 0; i < imgData.data.length; i += 4) {
                 let avg = (imgData.data[i] + imgData.data[i+1] + imgData.data[i+2]) / 3;
@@ -172,66 +180,103 @@
             }
             ctx.putImageData(imgData, 0, 0);
 
-            canvas.toBlob(function(blob) {
-                blob.arrayBuffer().then(buffer => {
-                    txStatus.innerText = `تصویر فشرده شد (${buffer.byteLength} بایت). آماده ارسال...`;
-                    const payload = createPayload(1, buffer);
-                    playSound(payload);
-                });
-            }, 'image/webp', 0.1);
+            canvas.toBlob(blob => blob.arrayBuffer().then(buffer => transmit(1, buffer)), 'image/webp', 0.1);
         };
     }
 
     // ==========================================
-    // بخش گیرنده (Receiver)
+    // گیرنده (Receiver) - مونتاژ پکت‌ها
     // ==========================================
 
-    function startReceiving() {
-        // باز کردن قفل میکروفون
-        if (Quiet.audioCtx && Quiet.audioCtx.state === 'suspended') {
-            Quiet.audioCtx.resume();
+    let mediaStream, scriptProcessor, ggwaveContext;
+    let receivedChunks = [];
+    let expectedChunks = 0;
+    let currentDataType = -1;
+
+    async function startReceiving() {
+        initAudio();
+        document.getElementById('btnReceive').style.display = 'none';
+        document.getElementById('btnStop').style.display = 'block';
+        document.getElementById('rxStatus').innerText = "در حال گوش دادن به محیط...";
+        document.getElementById('rxProgress').style.width = '0%';
+        receivedChunks = [];
+        expectedChunks = 0;
+
+        try {
+            mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false } });
+            ggwaveContext = ggwaveInstance.init(0, audioContext.sampleRate, protocolId);
+            const source = audioContext.createMediaStreamSource(mediaStream);
+            scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+            
+            scriptProcessor.onaudioprocess = (e) => {
+                const audioData = e.inputBuffer.getChannelData(0);
+                const res = ggwaveInstance.decode(ggwaveContext, audioData);
+                if (res && res.length > 0) handlePacket(new Uint8Array(res));
+            };
+
+            source.connect(scriptProcessor);
+            scriptProcessor.connect(audioContext.destination);
+        } catch (err) {
+            document.getElementById('rxStatus').innerText = "خطا: میکروفون مجاز نیست.";
         }
-
-        document.getElementById('btnReceive').disabled = true;
-        document.getElementById('btnStop').disabled = false;
-        rxStatus.innerText = "در حال گوش دادن به محیط (صبر کنید)...";
-
-        receiver = Quiet.receiver({
-            profile: 'audible',
-            onReceive: function(recvPayload) {
-                rxStatus.innerText = "پکت صوتی کشف و رمزگشایی شد!";
-                
-                let payloadView = new Uint8Array(recvPayload);
-                let dataType = payloadView[0];
-                let dataView = payloadView.slice(1);
-
-                if (dataType === 0) {
-                    let text = Quiet.ab2str(dataView.buffer);
-                    document.getElementById('receivedText').value += text + "\n";
-                } else if (dataType === 1) {
-                    let blob = new Blob([dataView.buffer], {type: 'image/webp'});
-                    let img = document.createElement('img');
-                    img.src = URL.createObjectURL(blob);
-                    document.getElementById('outImgBox').appendChild(img);
-                }
-            },
-            onCreateFail: function(reason) {
-                rxStatus.innerText = "خطا در میکروفون: " + reason;
-            },
-            onReceiveFail: function(fails) {
-                console.warn("پکت ناقص دریافت شد (نویز محیط).", fails);
-            }
-        });
     }
 
     function stopReceiving() {
-        if (receiver) {
-            receiver.destroy();
-            receiver = null;
+        if (scriptProcessor) scriptProcessor.disconnect();
+        if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+        if (ggwaveContext) ggwaveInstance.free(ggwaveContext);
+        document.getElementById('btnReceive').style.display = 'block';
+        document.getElementById('btnStop').style.display = 'none';
+        document.getElementById('rxStatus').innerText = "شنود متوقف شد.";
+    }
+
+    function handlePacket(payload) {
+        if (payload.length < 3) return;
+        
+        const dataType = payload[0];
+        const chunkIndex = payload[1];
+        const total = payload[2];
+        const data = payload.slice(3);
+
+        if (expectedChunks === 0) {
+            expectedChunks = total;
+            currentDataType = dataType;
+            receivedChunks = [];
+            document.getElementById('rxStatus').innerText = "شروع دریافت داده‌ها...";
         }
-        document.getElementById('btnReceive').disabled = false;
-        document.getElementById('btnStop').disabled = true;
-        rxStatus.innerText = "شنود متوقف شد.";
+
+        if (!receivedChunks[chunkIndex]) {
+            receivedChunks[chunkIndex] = data;
+            
+            let count = receivedChunks.filter(c => c !== undefined).length;
+            document.getElementById('rxProgress').style.width = Math.round((count / expectedChunks) * 100) + '%';
+            document.getElementById('rxStatus').innerText = `دریافت پکت ${chunkIndex + 1} از ${expectedChunks}`;
+
+            if (count === expectedChunks) assembleData();
+        }
+    }
+
+    function assembleData() {
+        document.getElementById('rxStatus').innerText = "فایل کامل شد! در حال پردازش...";
+        let totalLength = receivedChunks.reduce((acc, val) => acc + val.length, 0);
+        let finalData = new Uint8Array(totalLength);
+        let offset = 0;
+        
+        receivedChunks.forEach(chunk => {
+            finalData.set(chunk, offset);
+            offset += chunk.length;
+        });
+
+        if (currentDataType === 0) {
+            document.getElementById('receivedText').value += new TextDecoder().decode(finalData) + "\n";
+        } else {
+            let blob = new Blob([finalData], {type: 'image/webp'});
+            let img = document.createElement('img');
+            img.src = URL.createObjectURL(blob);
+            document.getElementById('outImgBox').appendChild(img);
+        }
+        
+        expectedChunks = 0; // ریست برای فایل بعدی
     }
 </script>
 </body>
