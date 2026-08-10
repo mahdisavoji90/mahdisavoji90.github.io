@@ -234,7 +234,14 @@ else if (typeof exports === 'object')
         expectedChunks = 0;
 
         try {
-            mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false } });
+            mediaStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: { 
+                    echoCancellation: false, 
+                    noiseSuppression: false, 
+                    autoGainControl: false,
+                    latency: 0
+                } 
+            });
             // API جدید: init با پارامترهای پیش‌فرض
             const parameters = ggwaveInstance.getDefaultParameters();
             parameters.sampleRateInp = audioContext.sampleRate;
