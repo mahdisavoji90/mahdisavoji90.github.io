@@ -107,13 +107,14 @@ else if (typeof exports === 'object')
         // بارگذاری ggwave (API جدید: ggwave_factory به عنوان تابع)
         ggwave().then(function(module) {
             ggwaveInstance = module;
+            // استفاده از پروتکل FAST به جای FASTEST برای پایداری بیشتر
             protocolId = module.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FAST;
             
             document.getElementById('sendTextBtn').disabled = false;
             document.getElementById('sendImgBtn').disabled = false;
             document.getElementById('btnReceive').disabled = false;
             
-            document.getElementById('txStatus').innerText = "آماده ارسال.";
+            document.getElementById('txStatus').innerText = "آماده ارسال (پروتکل پایدار).";
             document.getElementById('rxStatus').innerText = "آماده دریافت.";
         });
     };
@@ -166,21 +167,27 @@ else if (typeof exports === 'object')
     function playSound(payload) {
         return new Promise((resolve) => {
             console.log(`[Tx] Starting encode for payload of size ${payload.length}`);
+            // فیکس کردن sampleRate روی 48000 برای اطمینان
+            const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
             const parameters = ggwaveInstance.getDefaultParameters();
-            parameters.sampleRateInp = audioContext.sampleRate;
-            parameters.sampleRateOut = audioContext.sampleRate;
+            parameters.sampleRateInp = 48000;
+            parameters.sampleRateOut = 48000;
             const inst = ggwaveInstance.init(parameters);
             
             const waveform = ggwaveInstance.encode(inst, payload, protocolId, 50);
-            console.log(`[Tx] Encoded waveform size: ${waveform.length} samples`);
+            console.log(`[Tx] Encoded waveform size: ${waveform.length} samples | Duration: ${(waveform.length/48000).toFixed(2)}s`);
             
-            const buffer = audioContext.createBuffer(1, waveform.length, audioContext.sampleRate);
+            const buffer = ctx.createBuffer(1, waveform.length, 48000);
             buffer.getChannelData(0).set(waveform);
 
-            const source = audioContext.createBufferSource();
+            const source = ctx.createBufferSource();
             source.buffer = buffer;
-            source.connect(audioContext.destination);
-            source.onended = () => { ggwaveInstance.free(inst); resolve(); };
+            source.connect(ctx.destination);
+            source.onended = () => { 
+                ggwaveInstance.free(inst); 
+                ctx.close();
+                resolve(); 
+            };
             source.start();
         });
     }
@@ -246,8 +253,16 @@ else if (typeof exports === 'object')
             const parameters = ggwaveInstance.getDefaultParameters();
             parameters.sampleRateInp = audioContext.sampleRate;
             parameters.sampleRateOut = audioContext.sampleRate;
-            parameters.soundMarkerThreshold = 0;
+            // افزایش حساسیت گیرنده — آستانه تشخیص روی کمترین
+            if ('soundMarkerThreshold' in parameters) {
+                parameters.soundMarkerThreshold = 0;
+            }
+            if ('operatingMode' in parameters) {
+                // RX_AND_TX mode = 3 (default), but we only need RX here
+                parameters.operatingMode = 1; // RX only
+            }
             ggwaveContext = ggwaveInstance.init(parameters);
+            console.log(`[Rx] GGWave context initialized. SampleRate: ${audioContext.sampleRate}`);
             const source = audioContext.createMediaStreamSource(mediaStream);
             scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
             
