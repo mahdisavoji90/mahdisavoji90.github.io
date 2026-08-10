@@ -165,14 +165,15 @@ else if (typeof exports === 'object')
 
     function playSound(payload) {
         return new Promise((resolve) => {
-            // API جدید: init با پارامترها + encode(instance, data, protocol, volume)
+            console.log(`[Tx] Starting encode for payload of size ${payload.length}`);
             const parameters = ggwaveInstance.getDefaultParameters();
             parameters.sampleRateInp = audioContext.sampleRate;
             parameters.sampleRateOut = audioContext.sampleRate;
             const inst = ggwaveInstance.init(parameters);
             
-            const text = new TextDecoder().decode(payload);
-            const waveform = ggwaveInstance.encode(inst, text, protocolId, 50);
+            const waveform = ggwaveInstance.encode(inst, payload, protocolId, 50);
+            console.log(`[Tx] Encoded waveform size: ${waveform.length} samples`);
+            
             const buffer = audioContext.createBuffer(1, waveform.length, audioContext.sampleRate);
             buffer.getChannelData(0).set(waveform);
 
@@ -248,7 +249,10 @@ else if (typeof exports === 'object')
                 // API جدید: decode(instance, int8array)
                 const int8 = new Int8Array(audioData.buffer, audioData.byteOffset, audioData.length);
                 const res = ggwaveInstance.decode(ggwaveContext, int8);
-                if (res && res.length > 0) handlePacket(new Uint8Array(res));
+                if (res && res.length > 0) {
+                    console.log(`[Rx] DECODED data from audio! Size: ${res.length}`);
+                    handlePacket(new Uint8Array(res));
+                }
             };
 
             source.connect(scriptProcessor);
@@ -268,7 +272,11 @@ else if (typeof exports === 'object')
     }
 
     function handlePacket(payload) {
-        if (payload.length < 3) return;
+        console.log(`[Rx] Raw packet received! Size: ${payload.length} bytes`);
+        if (payload.length < 3) {
+            console.warn("[Rx] Dropped: Payload too small");
+            return;
+        }
         
         const dataType = payload[0];
         const chunkIndex = payload[1];
@@ -280,6 +288,7 @@ else if (typeof exports === 'object')
             currentDataType = dataType;
             receivedChunks = [];
             document.getElementById('rxStatus').innerText = "شروع دریافت داده‌ها...";
+            console.log(`[Rx] New file incoming. Expected chunks: ${total}, Type: ${dataType}`);
         }
 
         if (!receivedChunks[chunkIndex]) {
