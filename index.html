@@ -270,8 +270,11 @@ else if (typeof exports === 'object')
             
             scriptProcessor.onaudioprocess = (e) => {
                 const audioData = e.inputBuffer.getChannelData(0);
-                // API جدید: decode(instance, int8array)
-                const int8 = new Int8Array(audioData.buffer, audioData.byteOffset, audioData.byteLength);
+                // طبق نمونه رسمی ggwave: کپی Float32 و تفسیر به Int8Array
+                const src = new Float32Array(audioData);
+                const copy = new ArrayBuffer(src.byteLength);
+                new Float32Array(copy).set(src);
+                const int8 = new Int8Array(copy);
                 const res = ggwaveInstance.decode(ggwaveContext, int8);
                 if (res && res.length > 0) {
                     console.log(`[Rx] DECODED data from audio! Size: ${res.length}`);
