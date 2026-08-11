@@ -17,7 +17,9 @@
         .btn-receive:hover { background: #218838; }
         .btn-stop { background: #dc3545; display: none; }
         .status { padding: 10px; background: #e9ecef; border-radius: 4px; margin-top: 15px; font-size: 0.85em; color: #444; font-weight: bold;}
-        .progress-bar { height: 10px; background: #28a745; width: 0%; border-radius: 5px; transition: 0.2s; margin-top: 5px; }
+        .progress-track { height: 22px; background: #dfe4ea; border-radius: 11px; margin-top: 8px; overflow: hidden; position: relative; border: 1px solid #ccd1d9; }
+        .progress-bar { height: 100%; background: linear-gradient(90deg,#28a745,#5fd97e); width: 0%; border-radius: 11px; transition: width 0.25s ease; }
+        .progress-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.78em; font-weight: bold; color: #1e272e; direction: ltr; }
         #outImgBox img { max-width: 100px; border: 2px solid #28a745; border-radius: 5px; margin: 5px; }
     </style>
     
@@ -77,7 +79,10 @@ else if (typeof exports === 'object')
         <button class="btn-stop" id="btnStop" onclick="stopReceiving()">توقف شنود</button>
         
         <div id="rxStatus" class="status">منتظر شروع...</div>
-        <div class="progress-bar" id="rxProgress"></div>
+        <div class="progress-track">
+            <div class="progress-bar" id="rxProgress"></div>
+            <div class="progress-text" id="rxPercent">0%</div>
+        </div>
         
         <h4 style="margin-top: 20px;">خروجی متن:</h4>
         <textarea id="receivedText" readonly></textarea>
@@ -237,6 +242,7 @@ else if (typeof exports === 'object')
         document.getElementById('btnStop').style.display = 'block';
         document.getElementById('rxStatus').innerText = "در حال گوش دادن به محیط...";
         document.getElementById('rxProgress').style.width = '0%';
+        document.getElementById('rxPercent').innerText = '0%';
         receivedChunks = [];
         expectedChunks = 0;
 
@@ -319,6 +325,7 @@ else if (typeof exports === 'object')
             let count = receivedChunks.filter(c => c !== undefined).length;
             let percent = Math.round((count / expectedChunks) * 100);
             document.getElementById('rxProgress').style.width = percent + '%';
+            document.getElementById('rxPercent').innerText = percent + '%';
             document.getElementById('rxStatus').innerText = `در حال دریافت: ${percent}% (پکت ${chunkIndex + 1} از ${expectedChunks})`;
             console.log(`[Rx] Received packet ${chunkIndex + 1}/${expectedChunks} (${percent}%)`);
 
@@ -360,6 +367,7 @@ else if (typeof exports === 'object')
         expectedChunks = 0;
         receivedChunks = [];
         document.getElementById('rxProgress').style.width = '0%';
+        document.getElementById('rxPercent').innerText = '0%';
     }
 </script>
 </body>
