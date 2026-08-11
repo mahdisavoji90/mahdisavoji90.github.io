@@ -347,19 +347,25 @@ else if (typeof exports === 'object')
         // پکت داده — اگر خودمان در حال ارسال هستیم، نادیده بگیر (صدای خودمان)
         if (_isSending) return;
         handlePacket(payload);
-        // ارسال تأیید برای این پکت
-        sendAck(idx);
+        // ارسال تأیید برای این پکت — خارج از حلقه پردازش صوتی (async) تا بلاک نشود
+        setTimeout(() => sendAck(idx), 0);
     }
 
     // ارسال پکت تأیید (ACK) برای شماره پکت مشخص
-    function sendAck(idx) {
-        const ack = new Uint8Array(5);
-        ack[0] = ACK_TYPE;
-        ack[1] = (idx >> 8) & 0xFF;
-        ack[2] = idx & 0xFF;
-        ack[3] = 0; ack[4] = 0;
-        playSound(ack);
-        console.log(`[ACK] sent for packet ${idx}`);
+    async function sendAck(idx) {
+        try {
+            const ack = new Uint8Array(5);
+            ack[0] = ACK_TYPE;
+            ack[1] = (idx >> 8) & 0xFF;
+            ack[2] = idx & 0xFF;
+            ack[3] = 0; ack[4] = 0;
+            document.getElementById('rxStatus').innerText = `📤 در حال ارسال تأیید پکت ${idx + 1} ...`;
+            console.log(`[ACK] sending for packet ${idx}`);
+            await playSound(ack);
+            console.log(`[ACK] sent for packet ${idx}`);
+        } catch (e) {
+            console.error('[ACK] send failed', e);
+        }
     }
 
     async function startReceiving() {
