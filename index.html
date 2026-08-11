@@ -152,23 +152,27 @@ else if (typeof exports === 'object')
         const totalChunks = Math.ceil(dataView.length / CHUNK_SIZE);
         document.getElementById('txStatus').innerText = `در حال ارسال ${totalChunks} پکت...`;
 
-        for (let i = 0; i < totalChunks; i++) {
-            const chunk = dataView.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-            
-            // هدر ۵ بایتی: [نوع، indexHi, indexLo, totalHi, totalLo] — پشتیبانی تا 65535 پکت
-            const payload = new Uint8Array(5 + chunk.length);
-            payload[0] = dataType;
-            payload[1] = (i >> 8) & 0xFF;
-            payload[2] = i & 0xFF;
-            payload[3] = (totalChunks >> 8) & 0xFF;
-            payload[4] = totalChunks & 0xFF;
-            payload.set(chunk, 5);
-            
-            await playSound(payload);
-            let pct = Math.round(((i + 1) / totalChunks) * 100);
-            document.getElementById('txStatus').innerText = `ارسال: ${pct}% (پکت ${i + 1} از ${totalChunks})`;
-            
-            await new Promise(r => setTimeout(r, GUARD_INTERVAL));
+        // ارسال چند دور تکراری برای مقاومت در برابر گم‌شدن پکت‌ها در انتقال صوتی
+        const ROUNDS = totalChunks === 1 ? 1 : 3;
+        for (let round = 0; round < ROUNDS; round++) {
+            for (let i = 0; i < totalChunks; i++) {
+                const chunk = dataView.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+                
+                // هدر ۵ بایتی: [نوع، indexHi, indexLo, totalHi, totalLo]
+                const payload = new Uint8Array(5 + chunk.length);
+                payload[0] = dataType;
+                payload[1] = (i >> 8) & 0xFF;
+                payload[2] = i & 0xFF;
+                payload[3] = (totalChunks >> 8) & 0xFF;
+                payload[4] = totalChunks & 0xFF;
+                payload.set(chunk, 5);
+                
+                await playSound(payload);
+                let pct = Math.round(((i + 1) / totalChunks) * 100);
+                document.getElementById('txStatus').innerText = `ارسال (دور ${round + 1}/${ROUNDS}): ${pct}% (پکت ${i + 1} از ${totalChunks})`;
+                
+                await new Promise(r => setTimeout(r, GUARD_INTERVAL));
+            }
         }
         document.getElementById('txStatus').innerText = "ارسال با موفقیت تمام شد!";
     }
