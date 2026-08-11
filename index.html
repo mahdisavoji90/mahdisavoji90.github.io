@@ -279,7 +279,7 @@ else if (typeof exports === 'object')
                 parameters.operatingMode = 3;
             }
             if ('soundMarkerThreshold' in parameters) {
-                parameters.soundMarkerThreshold = 0;
+                parameters.soundMarkerThreshold = 3; // مقدار 0 باعث خاموش شدن Rx می‌شود!
             }
             ggwaveContext = ggwaveInstance.init(parameters);
             console.log(`[Rx] GGWave context initialized. SampleRate: ${audioContext.sampleRate}`);
