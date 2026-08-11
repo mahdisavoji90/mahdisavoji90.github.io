@@ -97,12 +97,12 @@ else if (typeof exports === 'object')
     let audioContext = null;
     
     // تنظیمات باند پهن پرسرعت
-    let protocolId; 
+    let protocolId;         // پروتکل داده
     const CHUNK_SIZE = 64; // حجم هر تکه (بایت)
-    const GUARD_INTERVAL = 150; // سکوت بین تلاش‌ها (میلی‌ثانیه)
+    const GUARD_INTERVAL = 200; // سکوت بین تلاش‌ها (میلی‌ثانیه)
     const ACK_TYPE = 200;      // نوع پکت تأیید
-    const ACK_TIMEOUT = 2500;  // مدت انتظار برای تأیید هر پکت (میلی‌ثانیه)
-    const MAX_RETRIES = 8;     // حداکثر تلاش مجدد برای هر پکت
+    const ACK_TIMEOUT = 7000;  // مدت انتظار برای تأیید هر پکت (میلی‌ثانیه) — پکت‌ها چند ثانیه طول می‌کشند
+    const MAX_RETRIES = 6;     // حداکثر تلاش مجدد برای هر پکت
 
     // وضعیت تأیید (ACK) سمت فرستنده
     let _ackGot = {};
