@@ -259,7 +259,24 @@ else if (typeof exports === 'object')
             const parameters = ggwaveInstance.getDefaultParameters();
             parameters.sampleRateInp = audioContext.sampleRate;
             parameters.sampleRateOut = audioContext.sampleRate;
-            // افزایش حساسیت گیرنده — آستانه تشخیص روی کمترین
+            // فعال‌سازی صریح حالت دریافت (RX). بدون این، خطای "Rx is disabled" می‌دهد.
+            try {
+                let rxMode = null;
+                if (ggwaveInstance.GGWAVE_OPERATING_MODE_RX_AND_TX !== undefined) {
+                    rxMode = ggwaveInstance.GGWAVE_OPERATING_MODE_RX_AND_TX;
+                } else if (ggwaveInstance.OperatingMode && ggwaveInstance.OperatingMode.GGWAVE_OPERATING_MODE_RX_AND_TX !== undefined) {
+                    rxMode = ggwaveInstance.OperatingMode.GGWAVE_OPERATING_MODE_RX_AND_TX;
+                }
+                if (rxMode !== null) {
+                    parameters.operatingMode = rxMode;
+                    console.log('[Rx] operatingMode set to RX_AND_TX =', rxMode);
+                } else {
+                    parameters.operatingMode = 3; // fallback: RX|TX
+                    console.log('[Rx] operatingMode fallback = 3');
+                }
+            } catch (e) {
+                parameters.operatingMode = 3;
+            }
             if ('soundMarkerThreshold' in parameters) {
                 parameters.soundMarkerThreshold = 0;
             }
