@@ -152,27 +152,23 @@ else if (typeof exports === 'object')
         const totalChunks = Math.ceil(dataView.length / CHUNK_SIZE);
         document.getElementById('txStatus').innerText = `در حال ارسال ${totalChunks} پکت...`;
 
-        // ارسال چند دور تکراری برای مقاومت در برابر گم‌شدن پکت‌ها در انتقال صوتی
-        const ROUNDS = totalChunks === 1 ? 1 : 3;
-        for (let round = 0; round < ROUNDS; round++) {
-            for (let i = 0; i < totalChunks; i++) {
-                const chunk = dataView.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-                
-                // هدر ۵ بایتی: [نوع، indexHi, indexLo, totalHi, totalLo]
-                const payload = new Uint8Array(5 + chunk.length);
-                payload[0] = dataType;
-                payload[1] = (i >> 8) & 0xFF;
-                payload[2] = i & 0xFF;
-                payload[3] = (totalChunks >> 8) & 0xFF;
-                payload[4] = totalChunks & 0xFF;
-                payload.set(chunk, 5);
-                
-                await playSound(payload);
-                let pct = Math.round(((i + 1) / totalChunks) * 100);
-                document.getElementById('txStatus').innerText = `ارسال (دور ${round + 1}/${ROUNDS}): ${pct}% (پکت ${i + 1} از ${totalChunks})`;
-                
-                await new Promise(r => setTimeout(r, GUARD_INTERVAL));
-            }
+        for (let i = 0; i < totalChunks; i++) {
+            const chunk = dataView.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+            
+            // هدر ۵ بایتی: [نوع، indexHi, indexLo, totalHi, totalLo]
+            const payload = new Uint8Array(5 + chunk.length);
+            payload[0] = dataType;
+            payload[1] = (i >> 8) & 0xFF;
+            payload[2] = i & 0xFF;
+            payload[3] = (totalChunks >> 8) & 0xFF;
+            payload[4] = totalChunks & 0xFF;
+            payload.set(chunk, 5);
+            
+            await playSound(payload);
+            let pct = Math.round(((i + 1) / totalChunks) * 100);
+            document.getElementById('txStatus').innerText = `ارسال: ${pct}% (پکت ${i + 1} از ${totalChunks})`;
+            
+            await new Promise(r => setTimeout(r, GUARD_INTERVAL));
         }
         document.getElementById('txStatus').innerText = "ارسال با موفقیت تمام شد!";
     }
@@ -214,7 +210,7 @@ else if (typeof exports === 'object')
         const img = new Image();
         img.src = URL.createObjectURL(file);
         img.onload = function() {
-            const MAX_DIM = 64; 
+            const MAX_DIM = 96; // ابعاد بزرگ‌تر برای کیفیت بهتر
             let width = img.width, height = img.height;
             if (width > height) { height = Math.round(height * MAX_DIM / width); width = MAX_DIM; }
             else { width = Math.round(width * MAX_DIM / height); height = MAX_DIM; }
@@ -223,15 +219,9 @@ else if (typeof exports === 'object')
             canvas.width = width; canvas.height = height;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
-            
-            const imgData = ctx.getImageData(0, 0, width, height);
-            for (let i = 0; i < imgData.data.length; i += 4) {
-                let avg = (imgData.data[i] + imgData.data[i+1] + imgData.data[i+2]) / 3;
-                imgData.data[i] = imgData.data[i+1] = imgData.data[i+2] = avg;
-            }
-            ctx.putImageData(imgData, 0, 0);
+            // بدون grayscale — رنگی می‌ماند
 
-            canvas.toBlob(blob => blob.arrayBuffer().then(buffer => transmit(1, buffer)), 'image/webp', 0.1);
+            canvas.toBlob(blob => blob.arrayBuffer().then(buffer => transmit(1, buffer)), 'image/webp', 0.5);
         };
     }
 
@@ -411,10 +401,24 @@ else if (typeof exports === 'object')
             document.getElementById('rxStatus').innerText = "✅ متن با موفقیت دریافت شد.";
         } else {
             let blob = new Blob([finalData], {type: 'image/webp'});
+            let url = URL.createObjectURL(blob);
             let img = document.createElement('img');
-            img.src = URL.createObjectURL(blob);
+            img.src = url;
             img.onload = () => {
-                document.getElementById('outImgBox').appendChild(img);
+                let wrap = document.createElement('div');
+                wrap.style.textAlign = 'center';
+                wrap.appendChild(img);
+                let dl = document.createElement('a');
+                dl.href = url;
+                dl.download = 'received_image_' + Date.now() + '.webp';
+                dl.innerText = '⬇️ دانلود عکس';
+                dl.style.display = 'block';
+                dl.style.marginTop = '5px';
+                dl.style.color = '#007bff';
+                dl.style.fontWeight = 'bold';
+                dl.style.textDecoration = 'none';
+                wrap.appendChild(dl);
+                document.getElementById('outImgBox').appendChild(wrap);
                 document.getElementById('rxStatus').innerText = "✅ تصویر با موفقیت دریافت و نمایش داده شد.";
             };
             img.onerror = () => {
