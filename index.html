@@ -172,27 +172,27 @@ else if (typeof exports === 'object')
     function playSound(payload) {
         return new Promise((resolve) => {
             console.log(`[Tx] Starting encode for payload of size ${payload.length}`);
-            // فیکس کردن sampleRate روی 48000 برای اطمینان
-            const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+            initAudio();
             const parameters = ggwaveInstance.getDefaultParameters();
-            parameters.sampleRateInp = 48000;
-            parameters.sampleRateOut = 48000;
+            parameters.sampleRateInp = audioContext.sampleRate;
+            parameters.sampleRateOut = audioContext.sampleRate;
             const inst = ggwaveInstance.init(parameters);
             
-            const waveform = ggwaveInstance.encode(inst, payload, protocolId, 50);
-            console.log(`[Tx] Encoded waveform size: ${waveform.length} samples | Duration: ${(waveform.length/48000).toFixed(2)}s`);
-            
-            const buffer = ctx.createBuffer(1, waveform.length, 48000);
-            buffer.getChannelData(0).set(waveform);
+            let waveform = ggwaveInstance.encode(inst, payload, protocolId, 50);
+            console.log(`[Tx] Encoded raw size: ${waveform.length}`);
+            // تبدیل خروجی به Float32Array (طبق نمونه رسمی ggwave)
+            const buf = new ArrayBuffer(waveform.length);
+            new Uint8Array(buf).set(new Uint8Array(waveform.buffer, waveform.byteOffset, waveform.length));
+            const floatData = new Float32Array(buf);
+            console.log(`[Tx] Float samples: ${floatData.length} | Duration: ${(floatData.length/audioContext.sampleRate).toFixed(2)}s`);
 
-            const source = ctx.createBufferSource();
+            const buffer = audioContext.createBuffer(1, floatData.length, audioContext.sampleRate);
+            buffer.getChannelData(0).set(floatData);
+
+            const source = audioContext.createBufferSource();
             source.buffer = buffer;
-            source.connect(ctx.destination);
-            source.onended = () => { 
-                ggwaveInstance.free(inst); 
-                ctx.close();
-                resolve(); 
-            };
+            source.connect(audioContext.destination);
+            source.onended = () => { ggwaveInstance.free(inst); resolve(); };
             source.start();
         });
     }
