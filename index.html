@@ -234,6 +234,7 @@ else if (typeof exports === 'object')
     let mediaStream, scriptProcessor, ggwaveContext;
     let receivedChunks = [];
     let expectedChunks = 0;
+    let _rxFrame = 0;
     let currentDataType = -1;
 
     async function startReceiving() {
@@ -287,6 +288,16 @@ else if (typeof exports === 'object')
             
             scriptProcessor.onaudioprocess = (e) => {
                 const audioData = e.inputBuffer.getChannelData(0);
+                // محاسبه شدت صدای ورودی (RMS) برای دیباگ میکروفون
+                let sum = 0;
+                for (let k = 0; k < audioData.length; k++) sum += audioData[k]*audioData[k];
+                const rms = Math.sqrt(sum / audioData.length);
+                _rxFrame++;
+                if (_rxFrame % 10 === 0) {
+                    const level = Math.min(100, Math.round(rms * 400));
+                    document.getElementById('rxStatus').innerText = `🎤 شدت صدای ورودی: ${level}% ${level>2?'(صدا می‌رسد ✓)':'(سکوت — صدایی نمی‌رسد)'}`;
+                    console.log(`[Rx] Mic RMS: ${rms.toFixed(5)} (level ${level}%)`);
+                }
                 // طبق نمونه رسمی ggwave: کپی Float32 و تفسیر به Int8Array
                 const src = new Float32Array(audioData);
                 const copy = new ArrayBuffer(src.byteLength);
