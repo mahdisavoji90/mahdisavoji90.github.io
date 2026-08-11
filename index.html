@@ -155,14 +155,18 @@ else if (typeof exports === 'object')
         for (let i = 0; i < totalChunks; i++) {
             const chunk = dataView.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
             
-            const payload = new Uint8Array(3 + chunk.length);
-            payload[0] = dataType; 
-            payload[1] = i;        
-            payload[2] = totalChunks; 
-            payload.set(chunk, 3);
+            // هدر ۵ بایتی: [نوع، indexHi, indexLo, totalHi, totalLo] — پشتیبانی تا 65535 پکت
+            const payload = new Uint8Array(5 + chunk.length);
+            payload[0] = dataType;
+            payload[1] = (i >> 8) & 0xFF;
+            payload[2] = i & 0xFF;
+            payload[3] = (totalChunks >> 8) & 0xFF;
+            payload[4] = totalChunks & 0xFF;
+            payload.set(chunk, 5);
             
             await playSound(payload);
-            document.getElementById('txStatus').innerText = `پکت ${i + 1} از ${totalChunks} ارسال شد.`;
+            let pct = Math.round(((i + 1) / totalChunks) * 100);
+            document.getElementById('txStatus').innerText = `ارسال: ${pct}% (پکت ${i + 1} از ${totalChunks})`;
             
             await new Promise(r => setTimeout(r, GUARD_INTERVAL));
         }
@@ -235,6 +239,7 @@ else if (typeof exports === 'object')
     let receivedChunks = [];
     let expectedChunks = 0;
     let _rxFrame = 0;
+    let _rxStallTimer = null;
     let currentDataType = -1;
 
     async function startReceiving() {
@@ -328,15 +333,15 @@ else if (typeof exports === 'object')
 
     function handlePacket(payload) {
         console.log(`[Rx] Raw packet received! Size: ${payload.length} bytes`);
-        if (payload.length < 3) {
+        if (payload.length < 5) {
             console.warn("[Rx] Dropped: Payload too small");
             return;
         }
         
         const dataType = payload[0];
-        const chunkIndex = payload[1];
-        const total = payload[2];
-        const data = payload.slice(3);
+        const chunkIndex = (payload[1] << 8) | payload[2];
+        const total = (payload[3] << 8) | payload[4];
+        const data = payload.slice(5);
 
         if (expectedChunks === 0) {
             expectedChunks = total;
@@ -353,13 +358,35 @@ else if (typeof exports === 'object')
             let percent = Math.round((count / expectedChunks) * 100);
             document.getElementById('rxProgress').style.width = percent + '%';
             document.getElementById('rxPercent').innerText = percent + '%';
-            document.getElementById('rxStatus').innerText = `در حال دریافت: ${percent}% (پکت ${chunkIndex + 1} از ${expectedChunks})`;
+            document.getElementById('rxStatus').innerText = `در حال دریافت: ${percent}% (${count} از ${expectedChunks} پکت)`;
             console.log(`[Rx] Received packet ${chunkIndex + 1}/${expectedChunks} (${percent}%)`);
 
-            if (count === expectedChunks) assembleData();
+            // واچ‌داگ: اگر چند ثانیه پکت جدیدی نرسید، پکت‌های گم‌شده را گزارش بده
+            if (_rxStallTimer) clearTimeout(_rxStallTimer);
+            if (count < expectedChunks) {
+                _rxStallTimer = setTimeout(reportMissing, 8000);
+            }
+
+            if (count === expectedChunks) {
+                if (_rxStallTimer) clearTimeout(_rxStallTimer);
+                assembleData();
+            }
         } else {
             console.log(`[Rx] Duplicate packet ignored: ${chunkIndex}`);
         }
+    }
+
+    function reportMissing() {
+        if (expectedChunks === 0) return;
+        let missing = [];
+        for (let i = 0; i < expectedChunks; i++) {
+            if (!receivedChunks[i]) missing.push(i + 1);
+        }
+        if (missing.length === 0) return;
+        let count = expectedChunks - missing.length;
+        console.warn(`[Rx] STALLED. Missing ${missing.length} packets: [${missing.join(', ')}]`);
+        document.getElementById('rxStatus').innerText =
+            `⚠️ دریافت متوقف شد. ${count} از ${expectedChunks} پکت رسید. ${missing.length} پکت گم شد: ${missing.slice(0,20).join(', ')}${missing.length>20?' ...':''} — لطفاً فرستنده دوباره ارسال کند.`;
     }
 
     function assembleData() {
