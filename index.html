@@ -263,10 +263,6 @@ else if (typeof exports === 'object')
             if ('soundMarkerThreshold' in parameters) {
                 parameters.soundMarkerThreshold = 0;
             }
-            if ('operatingMode' in parameters) {
-                // RX_AND_TX mode = 3 (default), but we only need RX here
-                parameters.operatingMode = 1; // RX only
-            }
             ggwaveContext = ggwaveInstance.init(parameters);
             console.log(`[Rx] GGWave context initialized. SampleRate: ${audioContext.sampleRate}`);
             const source = audioContext.createMediaStreamSource(mediaStream);
@@ -275,7 +271,7 @@ else if (typeof exports === 'object')
             scriptProcessor.onaudioprocess = (e) => {
                 const audioData = e.inputBuffer.getChannelData(0);
                 // API جدید: decode(instance, int8array)
-                const int8 = new Int8Array(audioData.buffer, audioData.byteOffset, audioData.length);
+                const int8 = new Int8Array(audioData.buffer, audioData.byteOffset, audioData.byteLength);
                 const res = ggwaveInstance.decode(ggwaveContext, int8);
                 if (res && res.length > 0) {
                     console.log(`[Rx] DECODED data from audio! Size: ${res.length}`);
