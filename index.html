@@ -99,7 +99,14 @@ else if (typeof exports === 'object')
     // تنظیمات باند پهن پرسرعت
     let protocolId; 
     const CHUNK_SIZE = 64; // حجم هر تکه (بایت)
-    const GUARD_INTERVAL = 300; // سکوت بین پکت‌ها (میلی‌ثانیه)
+    const GUARD_INTERVAL = 150; // سکوت بین تلاش‌ها (میلی‌ثانیه)
+    const ACK_TYPE = 200;      // نوع پکت تأیید
+    const ACK_TIMEOUT = 2500;  // مدت انتظار برای تأیید هر پکت (میلی‌ثانیه)
+    const MAX_RETRIES = 8;     // حداکثر تلاش مجدد برای هر پکت
+
+    // وضعیت تأیید (ACK) سمت فرستنده
+    let _ackGot = {};
+    let _ackWaiters = {};
 
     window.onload = function() {
         // بررسی وجود فایل ggwave.js در پوشه
@@ -150,7 +157,19 @@ else if (typeof exports === 'object')
         }
 
         const totalChunks = Math.ceil(dataView.length / CHUNK_SIZE);
-        document.getElementById('txStatus').innerText = `در حال ارسال ${totalChunks} پکت...`;
+
+        // فعال‌سازی میکروفون برای شنیدن پکت‌های تأیید (ACK) از گیرنده
+        _isSending = true;
+        _ackGot = {};
+        _ackWaiters = {};
+        try {
+            await ensureListening();
+        } catch (e) {
+            _isSending = false;
+            return alert("برای دریافت تأیید (ACK) به میکروفون نیاز است. لطفاً اجازه دسترسی بدهید.");
+        }
+
+        document.getElementById('txStatus').innerText = `در حال ارسال ${totalChunks} پکت با تأیید...`;
 
         for (let i = 0; i < totalChunks; i++) {
             const chunk = dataView.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
@@ -163,14 +182,52 @@ else if (typeof exports === 'object')
             payload[3] = (totalChunks >> 8) & 0xFF;
             payload[4] = totalChunks & 0xFF;
             payload.set(chunk, 5);
-            
-            await playSound(payload);
+
+            // ارسال با تلاش مجدد تا دریافت ACK
+            let acked = false;
+            for (let attempt = 1; attempt <= MAX_RETRIES && !acked; attempt++) {
+                document.getElementById('txStatus').innerText =
+                    `ارسال پکت ${i + 1} از ${totalChunks} (تلاش ${attempt})...`;
+                await playSound(payload);
+                acked = await waitForAck(i, ACK_TIMEOUT);
+                if (!acked) {
+                    console.warn(`[Tx] No ACK for packet ${i}, retry ${attempt}`);
+                    await new Promise(r => setTimeout(r, GUARD_INTERVAL));
+                }
+            }
+
+            if (!acked) {
+                document.getElementById('txStatus').innerText =
+                    `❌ پکت ${i + 1} پس از ${MAX_RETRIES} تلاش تأیید نشد. ارسال متوقف شد.`;
+                _isSending = false;
+                return;
+            }
+
             let pct = Math.round(((i + 1) / totalChunks) * 100);
-            document.getElementById('txStatus').innerText = `ارسال: ${pct}% (پکت ${i + 1} از ${totalChunks})`;
-            
+            document.getElementById('txStatus').innerText = `✓ تأیید شد: ${pct}% (پکت ${i + 1} از ${totalChunks})`;
             await new Promise(r => setTimeout(r, GUARD_INTERVAL));
         }
-        document.getElementById('txStatus').innerText = "ارسال با موفقیت تمام شد!";
+        document.getElementById('txStatus').innerText = "✅ ارسال کامل شد — همه پکت‌ها تأیید شدند!";
+        _isSending = false;
+    }
+
+    // انتظار برای دریافت ACK یک پکت خاص
+    function waitForAck(idx, timeout) {
+        return new Promise((resolve) => {
+            if (_ackGot[idx]) return resolve(true);
+            let done = false;
+            _ackWaiters[idx] = () => {
+                if (done) return;
+                done = true;
+                resolve(true);
+            };
+            setTimeout(() => {
+                if (done) return;
+                done = true;
+                delete _ackWaiters[idx];
+                resolve(_ackGot[idx] === true);
+            }, timeout);
+        });
     }
 
     function playSound(payload) {
@@ -235,9 +292,79 @@ else if (typeof exports === 'object')
     let _rxFrame = 0;
     let _rxStallTimer = null;
     let currentDataType = -1;
+    let _listening = false;   // آیا میکروفون در حال شنود است
+    let _isSending = false;   // آیا این دستگاه در حال ارسال فایل است (ACK-only mode)
+
+    // راه‌اندازی هسته شنود میکروفون (مشترک بین گیرنده و فرستنده برای ACK)
+    async function ensureListening() {
+        if (_listening) return;
+        mediaStream = await navigator.mediaDevices.getUserMedia({ 
+            audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, latency: 0 } 
+        });
+        const parameters = ggwaveInstance.getDefaultParameters();
+        parameters.sampleRateInp = audioContext.sampleRate;
+        parameters.sampleRateOut = audioContext.sampleRate;
+        try {
+            let rxMode = ggwaveInstance.GGWAVE_OPERATING_MODE_RX_AND_TX;
+            parameters.operatingMode = (rxMode !== undefined) ? rxMode : 6;
+            console.log('[Rx] operatingMode set to RX_AND_TX =', parameters.operatingMode);
+        } catch (e) { parameters.operatingMode = 6; }
+        if ('soundMarkerThreshold' in parameters) parameters.soundMarkerThreshold = 3;
+        ggwaveContext = ggwaveInstance.init(parameters);
+        console.log(`[Rx] GGWave context initialized. SampleRate: ${audioContext.sampleRate}`);
+
+        const source = audioContext.createMediaStreamSource(mediaStream);
+        scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+        scriptProcessor.onaudioprocess = (e) => {
+            const audioData = e.inputBuffer.getChannelData(0);
+            const src = new Float32Array(audioData);
+            const copy = new ArrayBuffer(src.byteLength);
+            new Float32Array(copy).set(src);
+            const int8 = new Int8Array(copy);
+            const res = ggwaveInstance.decode(ggwaveContext, int8);
+            if (res && res.length > 0) {
+                console.log(`[Rx] DECODED data from audio! Size: ${res.length}`);
+                routePacket(new Uint8Array(res));
+            }
+        };
+        source.connect(scriptProcessor);
+        scriptProcessor.connect(audioContext.destination);
+        _listening = true;
+    }
+
+    // مسیریابی پکت دریافتی: ACK یا داده
+    function routePacket(payload) {
+        if (payload.length < 5) return;
+        const type = payload[0];
+        const idx = (payload[1] << 8) | payload[2];
+        if (type === ACK_TYPE) {
+            // تأیید دریافت یک پکت — سمت فرستنده
+            _ackGot[idx] = true;
+            if (_ackWaiters[idx]) { _ackWaiters[idx](); delete _ackWaiters[idx]; }
+            console.log(`[ACK] received for packet ${idx}`);
+            return;
+        }
+        // پکت داده — اگر خودمان در حال ارسال هستیم، نادیده بگیر (صدای خودمان)
+        if (_isSending) return;
+        handlePacket(payload);
+        // ارسال تأیید برای این پکت
+        sendAck(idx);
+    }
+
+    // ارسال پکت تأیید (ACK) برای شماره پکت مشخص
+    function sendAck(idx) {
+        const ack = new Uint8Array(5);
+        ack[0] = ACK_TYPE;
+        ack[1] = (idx >> 8) & 0xFF;
+        ack[2] = idx & 0xFF;
+        ack[3] = 0; ack[4] = 0;
+        playSound(ack);
+        console.log(`[ACK] sent for packet ${idx}`);
+    }
 
     async function startReceiving() {
         initAudio();
+        _isSending = false;
         document.getElementById('btnReceive').style.display = 'none';
         document.getElementById('btnStop').style.display = 'block';
         document.getElementById('rxStatus').innerText = "در حال گوش دادن به محیط...";
@@ -245,72 +372,8 @@ else if (typeof exports === 'object')
         document.getElementById('rxPercent').innerText = '0%';
         receivedChunks = [];
         expectedChunks = 0;
-
         try {
-            mediaStream = await navigator.mediaDevices.getUserMedia({ 
-                audio: { 
-                    echoCancellation: false, 
-                    noiseSuppression: false, 
-                    autoGainControl: false,
-                    latency: 0
-                } 
-            });
-            // API جدید: init با پارامترهای پیش‌فرض
-            const parameters = ggwaveInstance.getDefaultParameters();
-            parameters.sampleRateInp = audioContext.sampleRate;
-            parameters.sampleRateOut = audioContext.sampleRate;
-            // فعال‌سازی صریح حالت دریافت (RX). بدون این، خطای "Rx is disabled" می‌دهد.
-            try {
-                let rxMode = null;
-                if (ggwaveInstance.GGWAVE_OPERATING_MODE_RX_AND_TX !== undefined) {
-                    rxMode = ggwaveInstance.GGWAVE_OPERATING_MODE_RX_AND_TX;
-                } else if (ggwaveInstance.OperatingMode && ggwaveInstance.OperatingMode.GGWAVE_OPERATING_MODE_RX_AND_TX !== undefined) {
-                    rxMode = ggwaveInstance.OperatingMode.GGWAVE_OPERATING_MODE_RX_AND_TX;
-                }
-                if (rxMode !== null) {
-                    parameters.operatingMode = rxMode;
-                    console.log('[Rx] operatingMode set to RX_AND_TX =', rxMode);
-                } else {
-                    parameters.operatingMode = 3; // fallback: RX|TX
-                    console.log('[Rx] operatingMode fallback = 3');
-                }
-            } catch (e) {
-                parameters.operatingMode = 3;
-            }
-            if ('soundMarkerThreshold' in parameters) {
-                parameters.soundMarkerThreshold = 3; // مقدار 0 باعث خاموش شدن Rx می‌شود!
-            }
-            ggwaveContext = ggwaveInstance.init(parameters);
-            console.log(`[Rx] GGWave context initialized. SampleRate: ${audioContext.sampleRate}`);
-            const source = audioContext.createMediaStreamSource(mediaStream);
-            scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
-            
-            scriptProcessor.onaudioprocess = (e) => {
-                const audioData = e.inputBuffer.getChannelData(0);
-                // محاسبه شدت صدای ورودی (RMS) برای دیباگ میکروفون
-                let sum = 0;
-                for (let k = 0; k < audioData.length; k++) sum += audioData[k]*audioData[k];
-                const rms = Math.sqrt(sum / audioData.length);
-                _rxFrame++;
-                if (_rxFrame % 10 === 0) {
-                    const level = Math.min(100, Math.round(rms * 400));
-                    document.getElementById('rxStatus').innerText = `🎤 شدت صدای ورودی: ${level}% ${level>2?'(صدا می‌رسد ✓)':'(سکوت — صدایی نمی‌رسد)'}`;
-                    console.log(`[Rx] Mic RMS: ${rms.toFixed(5)} (level ${level}%)`);
-                }
-                // طبق نمونه رسمی ggwave: کپی Float32 و تفسیر به Int8Array
-                const src = new Float32Array(audioData);
-                const copy = new ArrayBuffer(src.byteLength);
-                new Float32Array(copy).set(src);
-                const int8 = new Int8Array(copy);
-                const res = ggwaveInstance.decode(ggwaveContext, int8);
-                if (res && res.length > 0) {
-                    console.log(`[Rx] DECODED data from audio! Size: ${res.length}`);
-                    handlePacket(new Uint8Array(res));
-                }
-            };
-
-            source.connect(scriptProcessor);
-            scriptProcessor.connect(audioContext.destination);
+            await ensureListening();
         } catch (err) {
             document.getElementById('rxStatus').innerText = "خطا: میکروفون مجاز نیست.";
         }
@@ -320,6 +383,7 @@ else if (typeof exports === 'object')
         if (scriptProcessor) scriptProcessor.disconnect();
         if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
         if (ggwaveContext) ggwaveInstance.free(ggwaveContext);
+        _listening = false;
         document.getElementById('btnReceive').style.display = 'block';
         document.getElementById('btnStop').style.display = 'none';
         document.getElementById('rxStatus').innerText = "شنود متوقف شد.";
