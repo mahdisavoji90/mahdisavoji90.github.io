@@ -98,7 +98,7 @@ else if (typeof exports === 'object')
     
     // تنظیمات باند پهن پرسرعت
     let protocolId;         // پروتکل داده
-    const CHUNK_SIZE = 64; // حجم هر تکه (بایت)
+    const CHUNK_SIZE = 130; // حجم هر تکه (بایت) — سقف ggwave حدود 140 است (135 با هدر)
     const GUARD_INTERVAL = 200; // سکوت بین تلاش‌ها (میلی‌ثانیه)
     const ACK_TYPE = 200;      // نوع پکت تأیید
     const ACK_TIMEOUT = 7000;  // مدت انتظار برای تأیید هر پکت (میلی‌ثانیه) — پکت‌ها چند ثانیه طول می‌کشند
@@ -119,8 +119,8 @@ else if (typeof exports === 'object')
         // بارگذاری ggwave (API جدید: ggwave_factory به عنوان تابع)
         ggwave().then(function(module) {
             ggwaveInstance = module;
-            // استفاده از پروتکل FAST به جای FASTEST برای پایداری بیشتر
-            protocolId = module.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FAST;
+            // استفاده از پروتکل FASTEST برای سرعت بالاتر
+            protocolId = module.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FASTEST;
             
             document.getElementById('sendTextBtn').disabled = false;
             document.getElementById('sendImgBtn').disabled = false;
