@@ -99,7 +99,7 @@ else if (typeof exports === 'object')
     // تنظیمات باند پهن پرسرعت
     let protocolId;         // پروتکل داده
     const CHUNK_SIZE = 130; // حجم هر تکه (بایت) — سقف ggwave حدود 140 است (135 با هدر)
-    const GUARD_INTERVAL = 200; // سکوت بین تلاش‌ها (میلی‌ثانیه)
+    const GUARD_INTERVAL = 60; // سکوت بین تلاش‌ها (میلی‌ثانیه) — کم برای پاسخ سریع‌تر
     const ACK_TYPE = 200;      // نوع پکت تأیید
     const ACK_TIMEOUT = 7000;  // مدت انتظار برای تأیید هر پکت (میلی‌ثانیه) — پکت‌ها چند ثانیه طول می‌کشند
     const MAX_RETRIES = 6;     // حداکثر تلاش مجدد برای هر پکت
