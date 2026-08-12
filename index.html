@@ -3,24 +3,110 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>انتقال داده با صدا - نسخه پرسرعت (ggwave)</title>
+    <title>SoundWave Transfer — انتقال داده با صدا</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: Tahoma, Arial; padding: 20px; background: #f4f6f9; }
-        h1 { text-align: center; color: #333; }
-        .container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
-        .box { background: white; padding: 20px; border-radius: 8px; width: 45%; min-width: 300px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-        textarea { width: 95%; height: 80px; margin-bottom: 10px; padding: 10px; direction: ltr; resize: none; border: 1px solid #ddd; border-radius: 4px; }
-        button { padding: 12px 20px; cursor: pointer; color: white; border: none; border-radius: 4px; font-weight: bold; margin-top: 5px; width: 100%; font-size: 14px; transition: 0.3s;}
-        .btn-send { background: #007bff; }
-        .btn-send:hover { background: #0056b3; }
-        .btn-receive { background: #28a745; }
-        .btn-receive:hover { background: #218838; }
-        .btn-stop { background: #dc3545; display: none; }
-        .status { padding: 10px; background: #e9ecef; border-radius: 4px; margin-top: 15px; font-size: 0.85em; color: #444; font-weight: bold;}
-        .progress-track { height: 22px; background: #dfe4ea; border-radius: 11px; margin-top: 8px; overflow: hidden; position: relative; border: 1px solid #ccd1d9; }
-        .progress-bar { height: 100%; background: linear-gradient(90deg,#28a745,#5fd97e); width: 0%; border-radius: 11px; transition: width 0.25s ease; }
-        .progress-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.78em; font-weight: bold; color: #1e272e; direction: ltr; }
-        #outImgBox img { max-width: 100px; border: 2px solid #28a745; border-radius: 5px; margin: 5px; }
+        :root {
+            --accent-tx: #6a8dff;
+            --accent-rx: #2fe6a8;
+            --danger: #ff5d73;
+            --glass-bg: rgba(255,255,255,0.10);
+            --glass-brd: rgba(255,255,255,0.22);
+            --txt: #eef1ff;
+            --txt-dim: rgba(238,241,255,0.65);
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Poppins','Vazirmatn',sans-serif;
+            margin: 0; padding: 32px 18px; min-height: 100vh;
+            color: var(--txt);
+            background: linear-gradient(135deg,#1a1440 0%,#2b1b6b 40%,#0f2a5c 100%);
+            background-attachment: fixed;
+            position: relative; overflow-x: hidden;
+        }
+        html[lang="fa"] body { font-family: 'Vazirmatn','Poppins',sans-serif; }
+        /* blobs */
+        body::before, body::after {
+            content:''; position: fixed; border-radius: 50%; filter: blur(90px); opacity: .5; z-index: 0;
+        }
+        body::before { width: 380px; height: 380px; background: #6a8dff; top: -120px; right: -80px; }
+        body::after  { width: 420px; height: 420px; background: #2fe6a8; bottom: -150px; left: -100px; }
+
+        .topbar { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; max-width: 980px; margin: 0 auto 22px; gap: 12px; flex-wrap: wrap; }
+        h1 { font-size: 1.7rem; font-weight: 700; margin: 0; letter-spacing: .3px; display: flex; align-items: center; gap: 10px; }
+        h1 .wave { font-size: 1.5rem; }
+        .subtitle { color: var(--txt-dim); font-size: .82rem; margin: 2px 0 0; }
+
+        .lang-switch { display: flex; background: var(--glass-bg); border: 1px solid var(--glass-brd); border-radius: 999px; overflow: hidden; backdrop-filter: blur(10px); }
+        .lang-switch button { border: none; background: transparent; color: var(--txt-dim); padding: 8px 16px; cursor: pointer; font-weight: 600; font-size: .82rem; transition: .25s; font-family: inherit; }
+        .lang-switch button.active { background: rgba(255,255,255,0.9); color: #1a1440; }
+
+        .container { position: relative; z-index: 2; display: flex; flex-wrap: wrap; gap: 22px; justify-content: center; max-width: 980px; margin: 0 auto; }
+        .glass {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-brd);
+            border-radius: 22px; padding: 26px;
+            width: 46%; min-width: 310px;
+            backdrop-filter: blur(18px) saturate(140%);
+            -webkit-backdrop-filter: blur(18px) saturate(140%);
+            box-shadow: 0 8px 40px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.16);
+            transition: transform .3s, box-shadow .3s;
+        }
+        .glass:hover { transform: translateY(-4px); box-shadow: 0 14px 50px rgba(0,0,0,0.36), inset 0 1px 0 rgba(255,255,255,0.2); }
+
+        .card-title { font-size: 1.12rem; font-weight: 600; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+        .card-title .dot { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 12px currentColor; }
+        .tx .dot { color: var(--accent-tx); background: var(--accent-tx); }
+        .rx .dot { color: var(--accent-rx); background: var(--accent-rx); }
+        h4 { font-size: .82rem; font-weight: 600; color: var(--txt-dim); margin: 18px 0 8px; text-transform: uppercase; letter-spacing: .6px; }
+
+        textarea {
+            width: 100%; height: 84px; padding: 12px 14px; resize: none;
+            background: rgba(0,0,0,0.22); border: 1px solid var(--glass-brd);
+            border-radius: 14px; color: var(--txt); font-family: inherit; font-size: .9rem;
+            direction: ltr; outline: none; transition: border .25s;
+        }
+        textarea:focus { border-color: var(--accent-tx); }
+        textarea::placeholder { color: rgba(238,241,255,0.4); }
+
+        input[type=file] { width: 100%; font-size: .82rem; color: var(--txt-dim); margin-bottom: 10px; }
+        input[type=file]::file-selector-button {
+            background: rgba(255,255,255,0.14); border: 1px solid var(--glass-brd); color: var(--txt);
+            padding: 8px 14px; border-radius: 10px; cursor: pointer; font-family: inherit; margin-inline-end: 10px; transition: .25s;
+        }
+        input[type=file]::file-selector-button:hover { background: rgba(255,255,255,0.25); }
+
+        button.action {
+            width: 100%; padding: 13px; margin-top: 8px; border: none; border-radius: 14px;
+            font-family: inherit; font-weight: 600; font-size: .92rem; color: #fff; cursor: pointer;
+            transition: transform .2s, filter .2s, box-shadow .2s; letter-spacing: .3px;
+        }
+        button.action:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.08); }
+        button.action:active:not(:disabled) { transform: translateY(0); }
+        button.action:disabled { opacity: .45; cursor: not-allowed; }
+        .btn-send { background: linear-gradient(135deg,#6a8dff,#8b6aff); box-shadow: 0 6px 20px rgba(106,141,255,0.4); }
+        .btn-receive { background: linear-gradient(135deg,#2fe6a8,#28c2c2); box-shadow: 0 6px 20px rgba(47,230,168,0.35); }
+        .btn-stop { background: linear-gradient(135deg,#ff5d73,#ff8a5d); box-shadow: 0 6px 20px rgba(255,93,115,0.35); display: none; }
+
+        hr { border: 0; border-top: 1px solid rgba(255,255,255,0.12); margin: 20px 0; }
+
+        .status {
+            padding: 12px 14px; margin-top: 16px; border-radius: 14px; font-size: .82rem; font-weight: 500;
+            background: rgba(0,0,0,0.22); border: 1px solid var(--glass-brd); color: var(--txt);
+            min-height: 44px; display: flex; align-items: center; word-break: break-word;
+        }
+        .progress-track { height: 24px; margin-top: 12px; border-radius: 999px; overflow: hidden; position: relative; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-brd); }
+        .progress-bar { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg,var(--accent-rx),#5fd97e); transition: width .3s ease; box-shadow: 0 0 16px rgba(47,230,168,0.6); }
+        .progress-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: .76rem; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.5); direction: ltr; }
+
+        #outImgBox { display: flex; flex-wrap: wrap; gap: 10px; }
+        #outImgBox img { max-width: 130px; border-radius: 12px; border: 1px solid var(--glass-brd); }
+        #outImgBox a { display: block; margin-top: 6px; color: var(--accent-rx); font-weight: 600; font-size: .8rem; text-decoration: none; }
+
+        .footer { position: relative; z-index: 2; text-align: center; color: var(--txt-dim); font-size: .74rem; margin-top: 26px; }
+
+        @media (max-width: 720px) { .glass { width: 100%; } h1 { font-size: 1.4rem; } }
     </style>
     
     <!-- لود کردن کتابخانه مستقیماً از پوشه خودتان -->
@@ -51,48 +137,135 @@ else if (typeof exports === 'object')
 </head>
 <body>
 
-<h1>انتقال داده با باند پهن (حالت پرسرعت)</h1>
+<div class="topbar">
+    <div>
+        <h1><span class="wave">🔊</span> <span data-i18n="title">SoundWave Transfer</span></h1>
+        <p class="subtitle" data-i18n="subtitle">انتقال داده از طریق امواج صوتی</p>
+    </div>
+    <div class="lang-switch">
+        <button id="lang-fa" onclick="setLang('fa')">فارسی</button>
+        <button id="lang-en" onclick="setLang('en')">English</button>
+    </div>
+</div>
 
 <div class="container">
     <!-- فرستنده -->
-    <div class="box">
-        <h3 style="color: #007bff;">فرستنده (Transmitter)</h3>
-        
-        <h4>۱. پیام متنی</h4>
-        <textarea id="dataToSend" placeholder="متن خود را وارد کنید..."></textarea>
-        <button class="btn-send" onclick="transmit(0)" id="sendTextBtn" disabled>ارسال متن</button>
+    <div class="glass tx">
+        <h3 class="card-title"><span class="dot"></span><span data-i18n="tx_title">فرستنده</span></h3>
 
-        <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
+        <h4 data-i18n="tx_text_label">۱. پیام متنی</h4>
+        <textarea id="dataToSend" data-i18n-ph="tx_placeholder" placeholder="متن خود را وارد کنید..."></textarea>
+        <button class="action btn-send" onclick="transmit(0)" id="sendTextBtn" disabled data-i18n="tx_send_text">ارسال متن</button>
 
-        <h4>۲. تصویر (تکه‌تکه و فشرده)</h4>
-        <input type="file" id="imageInput" accept="image/*" style="margin-bottom: 10px;">
-        <button class="btn-send" onclick="prepareImage()" id="sendImgBtn" disabled>ارسال تصویر</button>
+        <hr>
 
-        <div id="txStatus" class="status">در حال بررسی ارتباط با کتابخانه محلی...</div>
+        <h4 data-i18n="tx_img_label">۲. تصویر (فشرده)</h4>
+        <input type="file" id="imageInput" accept="image/*">
+        <button class="action btn-send" onclick="prepareImage()" id="sendImgBtn" disabled data-i18n="tx_send_img">ارسال تصویر</button>
+
+        <div id="txStatus" class="status" data-i18n="tx_status_init">در حال بررسی ارتباط با کتابخانه...</div>
     </div>
 
     <!-- گیرنده -->
-    <div class="box">
-        <h3 style="color: #28a745;">گیرنده (Receiver)</h3>
-        
-        <button class="btn-receive" id="btnReceive" onclick="startReceiving()" disabled>شروع شنود محیط</button>
-        <button class="btn-stop" id="btnStop" onclick="stopReceiving()">توقف شنود</button>
-        
-        <div id="rxStatus" class="status">منتظر شروع...</div>
+    <div class="glass rx">
+        <h3 class="card-title"><span class="dot"></span><span data-i18n="rx_title">گیرنده</span></h3>
+
+        <button class="action btn-receive" id="btnReceive" onclick="startReceiving()" disabled data-i18n="rx_start">شروع شنود محیط</button>
+        <button class="action btn-stop" id="btnStop" onclick="stopReceiving()" data-i18n="rx_stop">توقف شنود</button>
+
+        <div id="rxStatus" class="status" data-i18n="rx_status_init">منتظر شروع...</div>
         <div class="progress-track">
             <div class="progress-bar" id="rxProgress"></div>
             <div class="progress-text" id="rxPercent">0%</div>
         </div>
-        
-        <h4 style="margin-top: 20px;">خروجی متن:</h4>
+
+        <h4 data-i18n="rx_text_out">خروجی متن</h4>
         <textarea id="receivedText" readonly></textarea>
 
-        <h4>خروجی تصویر:</h4>
+        <h4 data-i18n="rx_img_out">خروجی تصویر</h4>
         <div id="outImgBox"></div>
     </div>
 </div>
 
+<p class="footer">Powered by ggwave · <span data-i18n="footer">انتقال داده با صدا</span></p>
+
 <script>
+    // ==========================================
+    // سیستم چندزبانه (i18n) — فارسی / انگلیسی
+    // ==========================================
+    const I18N = {
+        fa: {
+            title: "انتقال داده با صدا",
+            subtitle: "انتقال داده از طریق امواج صوتی",
+            tx_title: "فرستنده",
+            tx_text_label: "۱. پیام متنی",
+            tx_placeholder: "متن خود را وارد کنید...",
+            tx_send_text: "ارسال متن",
+            tx_img_label: "۲. تصویر (فشرده)",
+            tx_send_img: "ارسال تصویر",
+            tx_status_init: "در حال بررسی ارتباط با کتابخانه...",
+            tx_ready: "آماده ارسال.",
+            rx_title: "گیرنده",
+            rx_start: "شروع شنود محیط",
+            rx_stop: "توقف شنود",
+            rx_status_init: "منتظر شروع...",
+            rx_ready: "آماده دریافت.",
+            rx_text_out: "خروجی متن",
+            rx_img_out: "خروجی تصویر",
+            footer: "انتقال داده با صدا",
+            lib_missing: "خطا: فایل ggwave.js پیدا نشد!",
+            dl_image: "⬇️ دانلود عکس",
+            no_text: "متنی وارد نشده!",
+            no_image: "لطفاً عکس انتخاب کنید.",
+            mic_denied: "خطا: میکروفون مجاز نیست.",
+            listening: "در حال گوش دادن به محیط...",
+            stopped: "شنود متوقف شد."
+        },
+        en: {
+            title: "SoundWave Transfer",
+            subtitle: "Data transfer over sound waves",
+            tx_title: "Transmitter",
+            tx_text_label: "1. Text Message",
+            tx_placeholder: "Enter your text...",
+            tx_send_text: "Send Text",
+            tx_img_label: "2. Image (compressed)",
+            tx_send_img: "Send Image",
+            tx_status_init: "Connecting to library...",
+            tx_ready: "Ready to send.",
+            rx_title: "Receiver",
+            rx_start: "Start Listening",
+            rx_stop: "Stop Listening",
+            rx_status_init: "Waiting to start...",
+            rx_ready: "Ready to receive.",
+            rx_text_out: "Text Output",
+            rx_img_out: "Image Output",
+            footer: "Data over sound",
+            lib_missing: "Error: ggwave.js not found!",
+            dl_image: "⬇️ Download image",
+            no_text: "No text entered!",
+            no_image: "Please select an image.",
+            mic_denied: "Error: microphone not allowed.",
+            listening: "Listening to environment...",
+            stopped: "Listening stopped."
+        }
+    };
+    let currentLang = localStorage.getItem('sw_lang') || 'fa';
+    function t(key) { return (I18N[currentLang] && I18N[currentLang][key]) || key; }
+    function setLang(lang) {
+        currentLang = lang;
+        localStorage.setItem('sw_lang', lang);
+        document.documentElement.lang = lang;
+        document.documentElement.dir = (lang === 'fa') ? 'rtl' : 'ltr';
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            el.textContent = t(el.getAttribute('data-i18n'));
+        });
+        document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+            el.placeholder = t(el.getAttribute('data-i18n-ph'));
+        });
+        document.getElementById('lang-fa').classList.toggle('active', lang === 'fa');
+        document.getElementById('lang-en').classList.toggle('active', lang === 'en');
+    }
+
     let ggwaveInstance = null;
     let audioContext = null;
     
@@ -109,10 +282,11 @@ else if (typeof exports === 'object')
     let _ackWaiters = {};
 
     window.onload = function() {
+        setLang(currentLang); // اعمال زبان ذخیره‌شده
         // بررسی وجود فایل ggwave.js در پوشه
         if (typeof ggwave === 'undefined') {
-            document.getElementById('txStatus').innerText = "خطا: فایل ggwave.js در پوشه پروژه پیدا نشد! لطفاً آن را دانلود کرده و کنار index.html قرار دهید.";
-            document.getElementById('rxStatus').innerText = "کتابخانه پیدا نشد.";
+            document.getElementById('txStatus').innerText = t('lib_missing');
+            document.getElementById('rxStatus').innerText = t('lib_missing');
             return;
         }
 
@@ -126,8 +300,8 @@ else if (typeof exports === 'object')
             document.getElementById('sendImgBtn').disabled = false;
             document.getElementById('btnReceive').disabled = false;
             
-            document.getElementById('txStatus').innerText = "آماده ارسال (پروتکل پایدار).";
-            document.getElementById('rxStatus').innerText = "آماده دریافت.";
+            document.getElementById('txStatus').innerText = t('tx_ready');
+            document.getElementById('rxStatus').innerText = t('rx_ready');
         });
     };
 
@@ -150,7 +324,7 @@ else if (typeof exports === 'object')
         let dataView;
         if (dataType === 0) {
             const text = document.getElementById('dataToSend').value;
-            if (!text) return alert("متنی وارد نشده!");
+            if (!text) return alert(t("no_text"));
             dataView = new TextEncoder().encode(text);
         } else {
             dataView = new Uint8Array(dataBuffer);
@@ -261,7 +435,7 @@ else if (typeof exports === 'object')
     // پردازش تصویر قبل از ارسال
     function prepareImage() {
         const file = document.getElementById('imageInput').files[0];
-        if (!file) return alert("لطفاً عکس انتخاب کنید.");
+        if (!file) return alert(t("no_image"));
 
         document.getElementById('txStatus').innerText = "در حال فشرده‌سازی...";
         const img = new Image();
@@ -373,7 +547,7 @@ else if (typeof exports === 'object')
         _isSending = false;
         document.getElementById('btnReceive').style.display = 'none';
         document.getElementById('btnStop').style.display = 'block';
-        document.getElementById('rxStatus').innerText = "در حال گوش دادن به محیط...";
+        document.getElementById('rxStatus').innerText = t('listening');
         document.getElementById('rxProgress').style.width = '0%';
         document.getElementById('rxPercent').innerText = '0%';
         receivedChunks = [];
@@ -381,7 +555,7 @@ else if (typeof exports === 'object')
         try {
             await ensureListening();
         } catch (err) {
-            document.getElementById('rxStatus').innerText = "خطا: میکروفون مجاز نیست.";
+            document.getElementById('rxStatus').innerText = t('mic_denied');
         }
     }
 
@@ -392,7 +566,7 @@ else if (typeof exports === 'object')
         _listening = false;
         document.getElementById('btnReceive').style.display = 'block';
         document.getElementById('btnStop').style.display = 'none';
-        document.getElementById('rxStatus').innerText = "شنود متوقف شد.";
+        document.getElementById('rxStatus').innerText = t('stopped');
     }
 
     function handlePacket(payload) {
@@ -481,7 +655,7 @@ else if (typeof exports === 'object')
                 let dl = document.createElement('a');
                 dl.href = url;
                 dl.download = 'received_image_' + Date.now() + '.webp';
-                dl.innerText = '⬇️ دانلود عکس';
+                dl.innerText = t('dl_image');
                 dl.style.display = 'block';
                 dl.style.marginTop = '5px';
                 dl.style.color = '#007bff';
