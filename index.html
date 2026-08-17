@@ -57,6 +57,8 @@
 
         .card-title { font-size: 1.12rem; font-weight: 600; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
         .card-title .dot { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 12px currentColor; }
+        .mode-toggle { display: flex; align-items: center; gap: 8px; margin: 6px 0 12px; padding: 8px 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; font-size: 0.85rem; cursor: pointer; user-select: none; }
+        .mode-toggle input { width: 16px; height: 16px; cursor: pointer; accent-color: #a855f7; }
         .tx .dot { color: var(--accent-tx); background: var(--accent-tx); }
         .rx .dot { color: var(--accent-rx); background: var(--accent-rx); }
         h4 { font-size: .82rem; font-weight: 600; color: var(--txt-dim); margin: 18px 0 8px; text-transform: uppercase; letter-spacing: .6px; }
@@ -153,6 +155,11 @@ else if (typeof exports === 'object')
     <div class="glass tx">
         <h3 class="card-title"><span class="dot"></span><span data-i18n="tx_title">فرستنده</span></h3>
 
+        <label class="mode-toggle">
+            <input type="checkbox" id="ultrasoundToggle">
+            <span data-i18n="ultra_label">🔇 حالت فراصوت (بی‌صدا برای گوش انسان)</span>
+        </label>
+
         <h4 data-i18n="tx_text_label">۱. پیام متنی</h4>
         <textarea id="dataToSend" data-i18n-ph="tx_placeholder" placeholder="متن خود را وارد کنید..."></textarea>
         <button class="action btn-send" onclick="transmit(0)" id="sendTextBtn" disabled data-i18n="tx_send_text">ارسال متن</button>
@@ -219,7 +226,8 @@ else if (typeof exports === 'object')
             no_image: "لطفاً عکس انتخاب کنید.",
             mic_denied: "خطا: میکروفون مجاز نیست.",
             listening: "در حال گوش دادن به محیط...",
-            stopped: "شنود متوقف شد."
+            stopped: "شنود متوقف شد.",
+            ultra_label: "🔇 حالت فراصوت (بی‌صدا برای گوش انسان)"
         },
         en: {
             title: "SoundWave Transfer",
@@ -246,7 +254,8 @@ else if (typeof exports === 'object')
             no_image: "Please select an image.",
             mic_denied: "Error: microphone not allowed.",
             listening: "Listening to environment...",
-            stopped: "Listening stopped."
+            stopped: "Listening stopped.",
+            ultra_label: "🔇 Ultrasound mode (inaudible to humans)"
         }
     };
     let currentLang = localStorage.getItem('sw_lang') || 'fa';
@@ -280,6 +289,7 @@ else if (typeof exports === 'object')
     // وضعیت تأیید (ACK) سمت فرستنده
     let _ackGot = {};
     let _ackWaiters = {};
+    let _activeProtocol = null;   // پروتکل قفل‌شده برای انتقال جاری (فراصوت/قابل‌شنیدن)
 
     window.onload = function() {
         setLang(currentLang); // اعمال زبان ذخیره‌شده
@@ -315,12 +325,68 @@ else if (typeof exports === 'object')
     }
 
     // ==========================================
+    // فشرده‌سازی داده با gzip بومی مرورگر (CompressionStream)
+    // پشتیبانی: Chrome/Edge 80+, Firefox 113+, Safari 16.4+
+    // ==========================================
+    const HAS_COMPRESSION = (typeof CompressionStream !== 'undefined');
+
+    async function gzipCompress(uint8) {
+        if (!HAS_COMPRESSION) return uint8;
+        const cs = new CompressionStream('gzip');
+        const writer = cs.writable.getWriter();
+        writer.write(uint8);
+        writer.close();
+        const chunks = [];
+        const reader = cs.readable.getReader();
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+        }
+        let len = chunks.reduce((a, c) => a + c.length, 0);
+        const out = new Uint8Array(len);
+        let off = 0;
+        for (const c of chunks) { out.set(c, off); off += c.length; }
+        return out;
+    }
+
+    async function gzipDecompress(uint8) {
+        const ds = new DecompressionStream('gzip');
+        const writer = ds.writable.getWriter();
+        writer.write(uint8);
+        writer.close();
+        const chunks = [];
+        const reader = ds.readable.getReader();
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+        }
+        let len = chunks.reduce((a, c) => a + c.length, 0);
+        const out = new Uint8Array(len);
+        let off = 0;
+        for (const c of chunks) { out.set(c, off); off += c.length; }
+        return out;
+    }
+
+    // انتخاب پروتکل بر اساس حالت (فراصوت/قابل‌شنیدن) — از سوییچ UI خوانده می‌شود
+    function getActiveProtocol() {
+        const useUltra = document.getElementById('ultrasoundToggle')?.checked;
+        if (useUltra) {
+            return ggwaveInstance.ProtocolId.GGWAVE_PROTOCOL_ULTRASOUND_FASTEST;
+        }
+        return ggwaveInstance.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FASTEST;
+    }
+
+    // ==========================================
     // فرستنده (Transmitter) - مجهز به Chunking
     // ==========================================
 
     async function transmit(dataType, dataBuffer = null) {
         initAudio();
-        
+        // قفل پروتکل فعال برای کل این انتقال (فرستنده و ACK یکسان)
+        _activeProtocol = getActiveProtocol();
+
         let dataView;
         if (dataType === 0) {
             const text = document.getElementById('dataToSend').value;
@@ -329,6 +395,22 @@ else if (typeof exports === 'object')
         } else {
             dataView = new Uint8Array(dataBuffer);
         }
+
+        // فشرده‌سازی gzip — اگر کوچک‌تر شد استفاده کن و بیت فشرده‌سازی را ست کن
+        let compressed = false;
+        if (HAS_COMPRESSION) {
+            try {
+                const gz = await gzipCompress(dataView);
+                if (gz.length < dataView.length) {
+                    const before = dataView.length;
+                    dataView = gz;
+                    compressed = true;
+                    console.log(`[Tx] gzip: ${before} → ${gz.length} bytes (${Math.round((1-gz.length/before)*100)}% کوچک‌تر)`);
+                }
+            } catch (e) { console.warn('[Tx] gzip skipped:', e); }
+        }
+        // بیت 7 نوع = پرچم فشرده‌سازی
+        const typeByte = dataType | (compressed ? 0x80 : 0x00);
 
         const totalChunks = Math.ceil(dataView.length / CHUNK_SIZE);
 
@@ -343,14 +425,15 @@ else if (typeof exports === 'object')
             return alert("برای دریافت تأیید (ACK) به میکروفون نیاز است. لطفاً اجازه دسترسی بدهید.");
         }
 
-        document.getElementById('txStatus').innerText = `در حال ارسال ${totalChunks} پکت با تأیید...`;
+        const modeLabel = (_activeProtocol === ggwaveInstance.ProtocolId.GGWAVE_PROTOCOL_ULTRASOUND_FASTEST) ? '🔇 فراصوت' : '🔊 قابل‌شنیدن';
+        document.getElementById('txStatus').innerText = `در حال ارسال ${totalChunks} پکت (${modeLabel}${compressed ? ' + فشرده' : ''})...`;
 
         for (let i = 0; i < totalChunks; i++) {
             const chunk = dataView.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
             
-            // هدر ۵ بایتی: [نوع، indexHi, indexLo, totalHi, totalLo]
+            // هدر ۵ بایتی: [نوع|پرچم‌فشرده، indexHi, indexLo, totalHi, totalLo]
             const payload = new Uint8Array(5 + chunk.length);
-            payload[0] = dataType;
+            payload[0] = typeByte;
             payload[1] = (i >> 8) & 0xFF;
             payload[2] = i & 0xFF;
             payload[3] = (totalChunks >> 8) & 0xFF;
@@ -413,7 +496,7 @@ else if (typeof exports === 'object')
             parameters.sampleRateOut = audioContext.sampleRate;
             const inst = ggwaveInstance.init(parameters);
             
-            let waveform = ggwaveInstance.encode(inst, payload, protocolId, 50);
+            let waveform = ggwaveInstance.encode(inst, payload, _activeProtocol || protocolId, 50);
             console.log(`[Tx] Encoded raw size: ${waveform.length}`);
             // تبدیل خروجی به Float32Array (طبق نمونه رسمی ggwave)
             const buf = new ArrayBuffer(waveform.length);
@@ -466,6 +549,7 @@ else if (typeof exports === 'object')
     let _rxFrame = 0;
     let _rxStallTimer = null;
     let currentDataType = -1;
+    let _rxCompressed = false;   // آیا داده دریافتی فشرده (gzip) است
     let _listening = false;   // آیا میکروفون در حال شنود است
     let _isSending = false;   // آیا این دستگاه در حال ارسال فایل است (ACK-only mode)
 
@@ -545,6 +629,7 @@ else if (typeof exports === 'object')
     async function startReceiving() {
         initAudio();
         _isSending = false;
+        _activeProtocol = getActiveProtocol();  // ACK با همان حالت (فراصوت/قابل‌شنیدن)
         document.getElementById('btnReceive').style.display = 'none';
         document.getElementById('btnStop').style.display = 'block';
         document.getElementById('rxStatus').innerText = t('listening');
@@ -576,7 +661,9 @@ else if (typeof exports === 'object')
             return;
         }
         
-        const dataType = payload[0];
+        const typeByte = payload[0];
+        const dataType = typeByte & 0x7F;      // بیت‌های پایین = نوع (0=متن، 1=عکس)
+        const isCompressed = (typeByte & 0x80) !== 0;  // بیت 7 = فشرده‌سازی gzip
         const chunkIndex = (payload[1] << 8) | payload[2];
         const total = (payload[3] << 8) | payload[4];
         const data = payload.slice(5);
@@ -584,9 +671,10 @@ else if (typeof exports === 'object')
         if (expectedChunks === 0) {
             expectedChunks = total;
             currentDataType = dataType;
+            _rxCompressed = isCompressed;
             receivedChunks = [];
             document.getElementById('rxStatus').innerText = "شروع دریافت داده‌ها...";
-            console.log(`[Rx] New file incoming. Expected chunks: ${total}, Type: ${dataType}`);
+            console.log(`[Rx] New file incoming. Expected chunks: ${total}, Type: ${dataType}, Compressed: ${isCompressed}`);
         }
 
         if (!receivedChunks[chunkIndex]) {
@@ -627,7 +715,7 @@ else if (typeof exports === 'object')
             `⚠️ دریافت متوقف شد. ${count} از ${expectedChunks} پکت رسید. ${missing.length} پکت گم شد: ${missing.slice(0,20).join(', ')}${missing.length>20?' ...':''} — لطفاً فرستنده دوباره ارسال کند.`;
     }
 
-    function assembleData() {
+    async function assembleData() {
         document.getElementById('rxStatus').innerText = "فایل کامل شد! در حال پردازش...";
         let totalLength = receivedChunks.reduce((acc, val) => acc + (val ? val.length : 0), 0);
         let finalData = new Uint8Array(totalLength);
@@ -639,6 +727,19 @@ else if (typeof exports === 'object')
                 offset += chunk.length;
             }
         });
+
+        // بازگشایی gzip در صورت فشرده بودن
+        if (_rxCompressed) {
+            try {
+                const before = finalData.length;
+                finalData = await gzipDecompress(finalData);
+                console.log(`[Rx] gunzip: ${before} → ${finalData.length} bytes`);
+            } catch (e) {
+                console.error('[Rx] gunzip failed:', e);
+                document.getElementById('rxStatus').innerText = "❌ خطا در بازگشایی داده فشرده";
+                expectedChunks = 0; receivedChunks = []; return;
+            }
+        }
 
         if (currentDataType === 0) {
             document.getElementById('receivedText').value += new TextDecoder().decode(finalData) + "\n";
